@@ -26,7 +26,7 @@ gcloud run services update lz3c --region $REGION \
 
 ### Deploy with Dockerfile only (no `cloudbuild.yaml`)
 
-You can build and deploy from the repo root **`Dockerfile`** (includes `infra/Dockerfile.combined` — Web + API in one image).
+You can build and deploy from the repo root **`Dockerfile`** (same content as `infra/Dockerfile.combined` — Web + API in one image). Cloud Build’s default Docker builder does **not** support Dockerfile `INCLUDE`; use a full Dockerfile or `-f infra/Dockerfile.combined`.
 
 **Option A — Cloud Run builds from source (simplest)**
 
