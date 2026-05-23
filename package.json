@@ -11,6 +11,7 @@
     "dev:web": "npm run dev -w @lz3c/web",
     "build": "npm run build -w @lz3c/shared && npm run build -w @lz3c/db && npm run build -w @lz3c/api",
     "build:web": "npm run build -w @lz3c/web",
+    "docker:build": "docker build -t lz3c:local .",
     "docker:api:build": "docker build -f infra/Dockerfile -t lz3c-api:local .",
     "docker:web:build": "docker build -f infra/Dockerfile.web -t lz3c-web:local .",
     "docker:up": "docker compose up --build",

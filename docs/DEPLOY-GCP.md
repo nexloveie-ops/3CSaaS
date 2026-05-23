@@ -1,6 +1,93 @@
 # Deploy LZ3C to GCP (Cloud Run)
 
-Production layout:
+## Recommended: one Cloud Run service
+
+One URL serves the SPA and proxies `/api` to NestJS inside the same container (nginx on `$PORT`, API on internal `:3000`).
+
+| Service | Image | Port | Notes |
+|---------|-------|------|-------|
+| `lz3c` (or your name) | `infra/Dockerfile.combined` | 8080 | Web + API; no `_API_UPSTREAM` |
+
+```bash
+gcloud builds submit --config cloudbuild.yaml \
+  --substitutions=_DEPLOY_REGION=$REGION,_SERVICE_NAME=lz3c
+```
+
+After the first deploy, set the public URL on the same service (replace with your Cloud Run URL):
+
+```bash
+export APP_URL=https://lz3c-xxxxx-$REGION.a.run.app
+
+gcloud run services update lz3c --region $REGION \
+  --set-env-vars "CORS_ORIGIN=$APP_URL,WEB_APP_URL=$APP_URL"
+```
+
+**Cloud Build trigger:** configuration file `cloudbuild.yaml` at repo root, substitutions `_DEPLOY_REGION`, `_SERVICE_NAME=lz3c`. You do **not** need a second trigger or `infra/cloudbuild-web.yaml`.
+
+### Deploy with Dockerfile only (no `cloudbuild.yaml`)
+
+You can build and deploy from the repo root **`Dockerfile`** (includes `infra/Dockerfile.combined` — Web + API in one image).
+
+**Option A — Cloud Run builds from source (simplest)**
+
+```bash
+export PROJECT_ID=your-gcp-project
+export REGION=europe-west1
+gcloud config set project $PROJECT_ID
+
+gcloud run deploy lz3c \
+  --source . \
+  --region $REGION \
+  --platform managed \
+  --allow-unauthenticated \
+  --port 8080 \
+  --timeout 300 \
+  --memory 1Gi \
+  --set-secrets MONGODB_URI=lz3c-mongodb-uri:latest,JWT_SECRET=lz3c-jwt-secret:latest \
+  --set-env-vars MONGODB_DB_NAME=lz3c,NODE_ENV=production,USE_CHROMIUM=1
+```
+
+Cloud Build will use the root `Dockerfile` automatically. After deploy, set `CORS_ORIGIN` and `WEB_APP_URL` to the service URL (see above).
+
+**Option B — Local Docker + push image**
+
+```bash
+export REGION=europe-west1
+export PROJECT_ID=your-gcp-project
+export IMAGE=$REGION-docker.pkg.dev/$PROJECT_ID/lz3c/lz3c:latest
+
+docker build -t $IMAGE .
+docker push $IMAGE
+
+gcloud run deploy lz3c \
+  --image $IMAGE \
+  --region $REGION \
+  --platform managed \
+  --allow-unauthenticated \
+  --port 8080 \
+  --set-secrets MONGODB_URI=lz3c-mongodb-uri:latest,JWT_SECRET=lz3c-jwt-secret:latest \
+  --set-env-vars MONGODB_DB_NAME=lz3c,NODE_ENV=production,USE_CHROMIUM=1
+```
+
+**Option C — Cloud Build trigger type “Dockerfile”**
+
+| Field | Value |
+|-------|--------|
+| Dockerfile location | `Dockerfile` (repo root) or `infra/Dockerfile.combined` |
+| Build context | `.` (repository root) |
+| Image destination | `$REGION-docker.pkg.dev/$PROJECT_ID/lz3c/lz3c:$COMMIT_SHA` |
+
+A Dockerfile-only trigger **only builds and pushes** the image. You still need either:
+
+- a second step / trigger to `gcloud run deploy --image ...`, or  
+- Cloud Run **continuous deployment** linked to that image, or  
+- run `gcloud run deploy` manually after each build.
+
+**API-only** (no static web): use `infra/Dockerfile`, not the root `Dockerfile`.
+
+---
+
+## Alternative: two Cloud Run services
 
 | Service | Image | Port | Notes |
 |---------|-------|------|-------|
@@ -54,7 +141,7 @@ Add more secrets as needed (`STRIPE_SECRET_KEY`, `TWILIO_AUTH_TOKEN`, etc.) and 
 
 ```bash
 gcloud builds submit --config infra/cloudbuild.yaml \
-  --substitutions=_REGION=$REGION,_SERVICE=lz3c-api
+  --substitutions=_DEPLOY_REGION=$REGION,_SERVICE_NAME=lz3c-api
 ```
 
 Or manually:
@@ -83,7 +170,7 @@ Set `API_UPSTREAM` to the API service URL with `/api/` suffix:
 export API_URL=https://lz3c-api-xxxxx-$REGION.a.run.app
 
 gcloud builds submit --config infra/cloudbuild-web.yaml \
-  --substitutions=_REGION=$REGION,_SERVICE=lz3c-web,_API_UPSTREAM=${API_URL}/api/
+  --substitutions=_DEPLOY_REGION=$REGION,_SERVICE_NAME=lz3c-web,_API_UPSTREAM=${API_URL}/api/
 ```
 
 After deploy, open the `lz3c-web` Cloud Run URL in the browser.
@@ -109,6 +196,28 @@ gcloud run services update lz3c-api \
 ```
 
 Without `GCS_BUCKET`, PDFs are stored under `LOCAL_STORAGE_PATH` inside the container (ephemeral on Cloud Run — use GCS in production).
+
+## Troubleshooting Cloud Build
+
+### `step 0 "Build" failed` with almost no logs
+
+| Cause | Fix |
+|-------|-----|
+| Trigger uses **Dockerfile at repo root** but file was only under `infra/` | Use **`cloudbuild.yaml` at repo root** or root **`Dockerfile`** (both are in this repo now) |
+| Trigger type is **Dockerfile** without `-f infra/Dockerfile` | Edit trigger → **Cloud Build config file** → `cloudbuild.yaml` (or `infra/cloudbuild.yaml`) |
+| **No logs** in console | Grant **Logs Writer** to Cloud Build / compute service account (see GCP warning) |
+| **Artifact Registry** repo missing | `gcloud artifacts repositories create lz3c --repository-format=docker --location=$REGION` |
+| **Secrets** missing at deploy step | Create `lz3c-mongodb-uri`, `lz3c-jwt-secret` in Secret Manager before deploy |
+
+After changing the trigger, run **Retry** on the build. Expand **Step #0** log stream (not only the summary line).
+
+### Trigger settings (recommended)
+
+- **Configuration**: Cloud Build configuration file (YAML)
+- **Location**: `cloudbuild.yaml` (repository root) or `infra/cloudbuild.yaml`
+- **Single service**: `cloudbuild.yaml`, `_SERVICE_NAME=lz3c`
+- **API only**: `infra/cloudbuild.yaml`, `_SERVICE_NAME=lz3c-api`
+- **Service account**: needs Artifact Registry Writer + Cloud Run Admin + Secret Accessor
 
 ## 7. Environment variables
 

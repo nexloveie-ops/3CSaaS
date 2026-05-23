@@ -1,25 +1,29 @@
-# GCP Cloud Build — build & deploy API to Cloud Run
-# Usage: gcloud builds submit --config infra/cloudbuild.yaml --substitutions=_REGION=europe-west1
+# Single Cloud Run service (Web + API in one container)
+# See infra/Dockerfile.combined
+
 substitutions:
   _DEPLOY_REGION: europe-west1
-  _SERVICE_NAME: lz3c-api
+  _SERVICE_NAME: lz3c
 
 steps:
-  - name: gcr.io/cloud-builders/docker
+  - id: build-image
+    name: gcr.io/cloud-builders/docker
     args:
       - build
       - -f
-      - infra/Dockerfile
+      - infra/Dockerfile.combined
       - -t
       - ${_DEPLOY_REGION}-docker.pkg.dev/$PROJECT_ID/lz3c/${_SERVICE_NAME}:$SHORT_SHA
       - .
 
-  - name: gcr.io/cloud-builders/docker
+  - id: push-image
+    name: gcr.io/cloud-builders/docker
     args:
       - push
       - ${_DEPLOY_REGION}-docker.pkg.dev/$PROJECT_ID/lz3c/${_SERVICE_NAME}:$SHORT_SHA
 
-  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+  - id: deploy
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk
     entrypoint: gcloud
     args:
       - run
@@ -30,8 +34,11 @@ steps:
       - --platform=managed
       - --allow-unauthenticated
       - --port=8080
+      - --timeout=300
+      - --cpu=1
+      - --memory=1Gi
       - --set-secrets=MONGODB_URI=lz3c-mongodb-uri:latest,JWT_SECRET=lz3c-jwt-secret:latest
-      - --set-env-vars=MONGODB_DB_NAME=lz3c,NODE_ENV=production
+      - --set-env-vars=MONGODB_DB_NAME=lz3c,NODE_ENV=production,USE_CHROMIUM=1
 
 images:
   - ${_DEPLOY_REGION}-docker.pkg.dev/$PROJECT_ID/lz3c/${_SERVICE_NAME}:$SHORT_SHA

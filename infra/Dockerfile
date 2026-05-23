@@ -6,12 +6,12 @@ COPY package.json package-lock.json* ./
 COPY packages/shared/package.json ./packages/shared/
 COPY packages/db/package.json ./packages/db/
 COPY apps/api/package.json ./apps/api/
+COPY apps/web/package.json ./apps/web/
 
-RUN npm ci 2>/dev/null || npm install
+RUN npm ci
 
 COPY packages ./packages
 COPY apps/api ./apps/api
-COPY tsconfig.json* ./
 
 RUN npm run build -w @lz3c/shared
 RUN npm run build -w @lz3c/db

@@ -9,6 +9,7 @@ build/
 coverage/
 data/
 .turbo/
+.docker-ci-test/
 .idea/
 .vscode/*
 !.vscode/extensions.json

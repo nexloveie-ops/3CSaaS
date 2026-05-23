@@ -1,7 +1,7 @@
 # Build & deploy Web (nginx + SPA) to Cloud Run
 substitutions:
-  _REGION: europe-west1
-  _SERVICE: lz3c-web
+  _DEPLOY_REGION: europe-west1
+  _SERVICE_NAME: lz3c-web
   _API_UPSTREAM: ''
 
 steps:
@@ -11,26 +11,26 @@ steps:
       - -f
       - infra/Dockerfile.web
       - -t
-      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/lz3c/${_SERVICE}:$SHORT_SHA
+      - ${_DEPLOY_REGION}-docker.pkg.dev/$PROJECT_ID/lz3c/${_SERVICE_NAME}:$SHORT_SHA
       - .
 
   - name: gcr.io/cloud-builders/docker
     args:
       - push
-      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/lz3c/${_SERVICE}:$SHORT_SHA
+      - ${_DEPLOY_REGION}-docker.pkg.dev/$PROJECT_ID/lz3c/${_SERVICE_NAME}:$SHORT_SHA
 
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk
     entrypoint: gcloud
     args:
       - run
       - deploy
-      - ${_SERVICE}
-      - --image=${_REGION}-docker.pkg.dev/$PROJECT_ID/lz3c/${_SERVICE}:$SHORT_SHA
-      - --region=${_REGION}
+      - ${_SERVICE_NAME}
+      - --image=${_DEPLOY_REGION}-docker.pkg.dev/$PROJECT_ID/lz3c/${_SERVICE_NAME}:$SHORT_SHA
+      - --region=${_DEPLOY_REGION}
       - --platform=managed
       - --allow-unauthenticated
       - --port=8080
       - --set-env-vars=API_UPSTREAM=${_API_UPSTREAM}
 
 images:
-  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/lz3c/${_SERVICE}:$SHORT_SHA
+  - ${_DEPLOY_REGION}-docker.pkg.dev/$PROJECT_ID/lz3c/${_SERVICE_NAME}:$SHORT_SHA
