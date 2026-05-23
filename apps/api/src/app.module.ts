@@ -45,6 +45,7 @@ import { TaxModule } from './tax/tax.module';
       useFactory: () => ({
         uri: process.env.MONGODB_URI,
         dbName: process.env.MONGODB_DB_NAME ?? 'lz3c',
+        serverSelectionTimeoutMS: 10_000,
       }),
     }),
     CommonModule,

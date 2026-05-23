@@ -1,26 +1,48 @@
-import './load-env';
-import { ValidationPipe } from '@nestjs/common';
-import { NestFactory } from '@nestjs/core';
-import { AppModule } from './app.module';
-
-async function bootstrap() {
-  const app = await NestFactory.create(AppModule, { rawBody: true });
-  app.useGlobalPipes(
-    new ValidationPipe({
-      whitelist: true,
-      transform: true,
-      forbidNonWhitelisted: true,
-    }),
-  );
-  app.setGlobalPrefix('api');
-  app.enableCors({
-    origin: process.env.CORS_ORIGIN?.split(',') ?? ['http://localhost:5173'],
-    credentials: true,
-  });
-  const port = Number(process.env.PORT ?? 3000);
-  const host = process.env.HOST ?? '0.0.0.0';
-  await app.listen(port, host);
-  console.log(`API listening on http://${host}:${port}/api`);
-}
-
-bootstrap();
+import './load-env';
+import { existsSync } from 'fs';
+import { join } from 'path';
+import { ValidationPipe } from '@nestjs/common';
+import { NestFactory } from '@nestjs/core';
+import { NestExpressApplication } from '@nestjs/platform-express';
+import { AppModule } from './app.module';
+
+function webDistRoot(): string | null {
+  const root = join(__dirname, '../../web/dist');
+  return existsSync(join(root, 'index.html')) ? root : null;
+}
+
+async function bootstrap() {
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    rawBody: true,
+  });
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      transform: true,
+      forbidNonWhitelisted: true,
+    }),
+  );
+  app.setGlobalPrefix('api');
+  app.enableCors({
+    origin: process.env.CORS_ORIGIN?.split(',') ?? ['http://localhost:5173'],
+    credentials: true,
+  });
+
+  const webRoot = process.env.SERVE_WEB === '1' ? webDistRoot() : null;
+  if (webRoot) {
+    app.useStaticAssets(webRoot, { index: false });
+    const http = app.getHttpAdapter().getInstance();
+    http.get(/^(?!\/api(?:\/|$)).*/, (_req, res) => {
+      res.sendFile(join(webRoot, 'index.html'));
+    });
+  }
+
+  const port = Number(process.env.PORT ?? 3000);
+  const host = process.env.HOST ?? '0.0.0.0';
+  await app.listen(port, host);
+  const mode = webRoot ? 'API + Web' : 'API';
+  console.log(`${mode} listening on http://${host}:${port}`);
+}
+
+bootstrap();
+
