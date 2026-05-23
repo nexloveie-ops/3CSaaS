@@ -1,0 +1,14 @@
+node_modules
+**/node_modules
+**/dist
+.git
+.github
+.env
+.env.local
+.env.*.local
+*.md
+!docs/DEPLOY-GCP.md
+apps/web/dist
+.cursor
+agent-transcripts
+terminals

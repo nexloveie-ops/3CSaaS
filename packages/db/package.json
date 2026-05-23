@@ -1,0 +1,17 @@
+{
+  "name": "@lz3c/db",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@nestjs/mongoose": "^11.0.1",
+    "mongoose": "^8.12.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.2"
+  }
+}

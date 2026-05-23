@@ -1,0 +1,40 @@
+# GCP Cloud Build — build & deploy API to Cloud Run
+# Usage: gcloud builds submit --config infra/cloudbuild.yaml --substitutions=_REGION=europe-west1
+substitutions:
+  _REGION: europe-west1
+  _SERVICE: lz3c-api
+
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -f
+      - infra/Dockerfile
+      - -t
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/lz3c/${_SERVICE}:$SHORT_SHA
+      - .
+
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/lz3c/${_SERVICE}:$SHORT_SHA
+
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - ${_SERVICE}
+      - --image=${_REGION}-docker.pkg.dev/$PROJECT_ID/lz3c/${_SERVICE}:$SHORT_SHA
+      - --region=${_REGION}
+      - --platform=managed
+      - --allow-unauthenticated
+      - --port=8080
+      - --set-secrets=MONGODB_URI=lz3c-mongodb-uri:latest,JWT_SECRET=lz3c-jwt-secret:latest
+      - --set-env-vars=MONGODB_DB_NAME=lz3c,NODE_ENV=production
+
+images:
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/lz3c/${_SERVICE}:$SHORT_SHA
+
+options:
+  logging: CLOUD_LOGGING_ONLY

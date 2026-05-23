@@ -1,0 +1,56 @@
+{
+  "name": "lz3c",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:api": "npm run dev -w @lz3c/api",
+    "dev:web": "npm run dev -w @lz3c/web",
+    "build": "npm run build -w @lz3c/shared && npm run build -w @lz3c/db && npm run build -w @lz3c/api",
+    "build:web": "npm run build -w @lz3c/web",
+    "docker:api:build": "docker build -f infra/Dockerfile -t lz3c-api:local .",
+    "docker:web:build": "docker build -f infra/Dockerfile.web -t lz3c-web:local .",
+    "docker:up": "docker compose up --build",
+    "docker:down": "docker compose down",
+    "test:mongo": "node scripts/test-mongo.mjs",
+    "test:smoke": "node scripts/smoke-test.mjs",
+    "test:smoke:cashier-store": "node scripts/smoke-cashier-store.mjs",
+    "test:smoke:catalog": "node scripts/smoke-catalog.mjs",
+    "test:smoke:auth-me": "node scripts/smoke-auth-me.mjs",
+    "test:smoke:phase4": "node scripts/smoke-phase4.mjs",
+    "test:smoke:phase6": "node scripts/smoke-phase6.mjs",
+    "test:smoke:phase8": "node scripts/smoke-phase8.mjs",
+    "test:smoke:phase9": "node scripts/smoke-phase9.mjs",
+    "test:smoke:phase10": "node scripts/smoke-phase10.mjs",
+    "test:smoke:docker": "node scripts/smoke-docker.mjs",
+    "test:smoke:phase12": "node scripts/smoke-phase12.mjs",
+    "test:smoke:phase13": "node scripts/smoke-phase13.mjs",
+    "test:smoke:phase14": "node scripts/smoke-phase14.mjs",
+    "test:smoke:phase15": "node scripts/smoke-phase15.mjs",
+    "test:smoke:phase16": "node scripts/smoke-phase16.mjs",
+    "test:smoke:phase17": "node scripts/smoke-phase17.mjs",
+    "test:smoke:phase18": "node scripts/smoke-phase18.mjs",
+    "test:smoke:phase19": "node scripts/smoke-phase19.mjs",
+    "test:smoke:phase20": "node scripts/smoke-phase20.mjs",
+    "test:smoke:phase21": "node scripts/smoke-phase21.mjs",
+    "test:smoke:phase22": "node scripts/smoke-phase22.mjs",
+    "test:smoke:phase23": "node scripts/smoke-phase23.mjs",
+    "test:smoke:phase24": "node scripts/smoke-phase24.mjs",
+    "test:smoke:phase25": "node scripts/smoke-phase25.mjs",
+    "test:smoke:phase26": "node scripts/smoke-phase26.mjs",
+    "test:smoke:phase27": "node scripts/smoke-phase27.mjs",
+    "test:smoke:phase28": "node scripts/smoke-phase28.mjs",
+    "test:smoke:phase29": "node scripts/smoke-phase29.mjs",
+    "test:smoke:phase30": "node scripts/smoke-phase30.mjs"
+  },
+  "devDependencies": {
+    "mongodb": "^6.14.2"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {}
+}
