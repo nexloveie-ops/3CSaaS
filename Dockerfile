@@ -26,11 +26,7 @@ ENV NODE_ENV=production
 ENV SERVE_WEB=1
 ENV HOST=0.0.0.0
 ENV PORT=8080
-
-RUN apk add --no-cache wget \
-    chromium nss freetype harfbuzz ca-certificates ttf-freefont
-
-ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+ENV USE_CHROMIUM=1
 
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/apps/api/dist ./apps/api/dist

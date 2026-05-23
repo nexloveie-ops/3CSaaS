@@ -42,11 +42,18 @@ import { TaxModule } from './tax/tax.module';
       ],
     }),
     MongooseModule.forRootAsync({
-      useFactory: () => ({
-        uri: process.env.MONGODB_URI,
-        dbName: process.env.MONGODB_DB_NAME ?? 'lz3c',
-        serverSelectionTimeoutMS: 10_000,
-      }),
+      useFactory: () => {
+        const uri = process.env.MONGODB_URI?.trim();
+        if (!uri) {
+          throw new Error('MONGODB_URI is required');
+        }
+        return {
+          uri,
+          dbName: process.env.MONGODB_DB_NAME ?? 'lz3c',
+          serverSelectionTimeoutMS: 8_000,
+          connectTimeoutMS: 8_000,
+        };
+      },
     }),
     CommonModule,
     StorageModule,

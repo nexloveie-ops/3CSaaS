@@ -2,7 +2,7 @@
 
 ## Recommended: one Cloud Run service
 
-One URL serves the SPA and proxies `/api` to NestJS inside the same container (nginx on `$PORT`, API on internal `:3000`).
+One URL serves the SPA and `/api` from a single Node process on `$PORT` (default 8080).
 
 | Service | Image | Port | Notes |
 |---------|-------|------|-------|
@@ -25,6 +25,25 @@ gcloud run services update lz3c --region $REGION \
 ```
 
 **Cloud Build trigger:** configuration file `cloudbuild.yaml` at repo root, substitutions `_DEPLOY_REGION`, `_SERVICE_NAME=lz3c`. You do **not** need a second trigger or `infra/cloudbuild-web.yaml`.
+
+### Cloud Run “Deploy from source” (service `lz3csaas`)
+
+Build/deploy from GitHub **does not** add secrets automatically. After the first deploy, open **Cloud Run → lz3csaas → Edit & deploy new revision → Variables & secrets**:
+
+| Name | Type | Value |
+|------|------|--------|
+| `MONGODB_URI` | Reference a secret | `lz3c-mongodb-uri` (latest) |
+| `JWT_SECRET` | Reference a secret | `lz3c-jwt-secret` (latest) |
+| `MONGODB_DB_NAME` | Variable | `lz3c` |
+| `NODE_ENV` | Variable | `production` |
+
+Recommended revision settings: **Memory 1 GiB**, **CPU 1**, **Request timeout 300s**, **Port 8080**.
+
+MongoDB Atlas: **Network Access** must allow Cloud Run (e.g. `0.0.0.0/0` for testing, or Atlas Private Link / fixed egress later).
+
+**502 on `/api/auth/login`**: usually the running revision has no MongoDB (old nginx revision, or API crash). Check **Logs** for `[startup] Missing required env` or `MongooseServerSelectionError`. Test: `GET https://YOUR-URL/api/health` should return `"status":"ok"` when Mongo is connected.
+
+**Deploy failed “listen on PORT=8080”**: add secrets above, set memory to **1 GiB**, redeploy latest `main`.
 
 ### Deploy with Dockerfile only (no `cloudbuild.yaml`)
 
