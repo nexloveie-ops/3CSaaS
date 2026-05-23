@@ -13,6 +13,8 @@ gcloud builds submit --config cloudbuild.yaml \
   --substitutions=_DEPLOY_REGION=$REGION,_SERVICE_NAME=lz3c
 ```
 
+If deploy fails with **“failed to start and listen on PORT=8080”**, ensure the image uses the combined entrypoint (nginx listens on `$PORT` immediately; API may start later). Redeploy after commit `124dbb0` or later.
+
 After the first deploy, set the public URL on the same service (replace with your Cloud Run URL):
 
 ```bash
