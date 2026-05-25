@@ -225,9 +225,11 @@ export const zhMessages: Messages = {
   },
   inventory: {
     title: '库存',
-    selectCatalog: '商品目录',
-    backToCatalogs: '目录',
-    noCatalogCategories: '请先在 Catalog 中添加分类。',
+    selectCatalog: '分类',
+    allProducts: '全部商品',
+    backToCatalogs: '分类',
+    noCatalogCategories:
+      '暂无分类，已显示全部商品；可在「商品」中添加分类以便浏览。',
     noProductsInCatalog: '该分类下暂无商品。',
     pickProductHint: '点击商品进行入库。',
     stockOnHand: '当前库存',
@@ -289,10 +291,8 @@ export const zhMessages: Messages = {
     title: '销售',
     products: '商品',
     selectCatalog: '分类',
-    allProducts: '全部商品',
     backToCatalogs: '返回',
-    noCatalogCategories:
-      '暂无分类，已显示全部商品；可在「商品」中添加分类以便浏览。',
+    noCatalogCategories: '暂无分类，请先在「商品」中添加。',
     noProductsInCatalog: '该分类下暂无商品。',
     serializedBadge: '序列号',
     pickSerialTitle: '选择 IMEI / 序列号',
