@@ -3,13 +3,17 @@ import { useTranslation } from 'react-i18next';
 import { PosCheckout, type SalePaymentPayload } from './PosCheckout';
 
 export type CartLine = {
-  productId: string;
+  productId?: string;
   name: string;
   qty: number;
   price: number;
   serialUnitId?: string;
   sn?: string;
   workOrderId?: string;
+  adHoc?: boolean;
+  taxCategoryId?: string;
+  catalogCategoryId?: string;
+  costPrice?: number;
 };
 
 type Props = {
@@ -19,12 +23,30 @@ type Props = {
   checkoutPending?: boolean;
   onRemove: (index: number) => void;
   onUpdateQty: (index: number, delta: number) => void;
+  onUpdatePrice: (index: number, price: number) => void;
   onCheckout: (payment: SalePaymentPayload) => void;
   children?: ReactNode;
 };
 
 function canAdjustQty(line: CartLine): boolean {
-  return !line.serialUnitId && !line.workOrderId;
+  return !line.serialUnitId && !line.workOrderId && !line.adHoc;
+}
+
+function canAdjustPrice(line: CartLine): boolean {
+  return !line.workOrderId;
+}
+
+function parseUnitPrice(value: string): number {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 0) return 0;
+  return Math.round(n * 100) / 100;
+}
+
+function lineKey(line: CartLine, index: number): string {
+  if (line.workOrderId) return `wo-${line.workOrderId}`;
+  if (line.serialUnitId) return `sn-${line.serialUnitId}`;
+  if (line.adHoc) return `adhoc-${index}-${line.name}`;
+  return `${line.productId}-${index}`;
 }
 
 export function PosCartPanel({
@@ -34,6 +56,7 @@ export function PosCartPanel({
   checkoutPending,
   onRemove,
   onUpdateQty,
+  onUpdatePrice,
   onCheckout,
   children,
 }: Props) {
@@ -62,8 +85,9 @@ export function PosCartPanel({
             {lines.map((line, i) => {
               const lineTotal = line.price * line.qty;
               const adjustable = canAdjustQty(line);
+              const priceEditable = canAdjustPrice(line);
               return (
-                <li key={line.workOrderId ?? line.serialUnitId ?? `${line.productId}-${i}`}>
+                <li key={lineKey(line, i)}>
                   <article className="pos-cart-item">
                     <div className="pos-cart-item__head">
                       <div className="pos-cart-item__info">
@@ -76,6 +100,9 @@ export function PosCartPanel({
                         )}
                         {line.workOrderId && (
                           <span className="pos-cart-item__badge">{t('pos.repairSection')}</span>
+                        )}
+                        {line.adHoc && (
+                          <span className="pos-cart-item__badge">{t('pos.quickSaleBadge')}</span>
                         )}
                       </div>
                       <button
@@ -114,12 +141,36 @@ export function PosCartPanel({
                         </span>
                       )}
                       <div className="pos-cart-item__pricing">
-                        {line.qty > 1 && (
-                          <span className="pos-cart-item__unit">
-                            €{line.price.toFixed(2)} × {line.qty}
+                        {priceEditable ? (
+                          <label className="pos-cart-item__price-edit">
+                            <span className="pos-cart-item__price-edit-prefix">€</span>
+                            <input
+                              type="number"
+                              min={0}
+                              step={0.01}
+                              className="pos-cart-item__price-input"
+                              value={line.price}
+                              onChange={(e) =>
+                                onUpdatePrice(i, parseUnitPrice(e.target.value))
+                              }
+                              aria-label={t('pos.lineUnitPrice')}
+                            />
+                          </label>
+                        ) : (
+                          <span className="pos-cart-item__unit-price">
+                            €{line.price.toFixed(2)}
                           </span>
                         )}
-                        <span className="pos-cart-item__total">€{lineTotal.toFixed(2)}</span>
+                        {line.qty > 1 && (
+                          <span className="pos-cart-item__unit">
+                            × {line.qty}
+                          </span>
+                        )}
+                        {(line.qty > 1 || !priceEditable) && (
+                          <span className="pos-cart-item__total">
+                            €{lineTotal.toFixed(2)}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </article>

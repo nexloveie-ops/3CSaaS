@@ -94,6 +94,7 @@ export class PosService {
         sn: l.sn,
       })),
       totalIncVat: order.totalIncVat,
+      salesTerms: store?.salesTerms,
     });
   }
 
@@ -343,6 +344,49 @@ export class PosService {
       if (line.workOrderId) {
         workOrderIds.add(line.workOrderId);
       }
+
+      if (line.adHocDescription?.trim()) {
+        if (!line.taxCategoryId) {
+          throw new BadRequestException('Tax category required for quick sale lines');
+        }
+        const tax = await this.taxModel.findOne({
+          _id: line.taxCategoryId,
+          companyId: new Types.ObjectId(companyId),
+        }).lean();
+        if (!tax) throw new BadRequestException('Tax category missing');
+
+        const unitPrice = line.unitPriceIncVat ?? 0;
+        const lineGross = unitPrice * line.quantity;
+        const taxResult = calculateLineTax({
+          scheme: tax.scheme as TaxScheme,
+          salePriceIncVat: unitPrice,
+          costPreTax: line.costPreTax,
+          perspective: 'retail',
+          quantity: line.quantity,
+        });
+
+        subtotalIncVat += lineGross;
+        totalVat += taxResult.vatAmount;
+
+        orderLines.push({
+          productName: line.adHocDescription.trim(),
+          quantity: line.quantity,
+          unitPriceIncVat: unitPrice,
+          taxScheme: tax.scheme,
+          costPreTax: line.costPreTax,
+          lineTotalIncVat: lineGross,
+          adHoc: true,
+          catalogCategoryId: line.catalogCategoryId
+            ? new Types.ObjectId(line.catalogCategoryId)
+            : undefined,
+        });
+        continue;
+      }
+
+      if (!line.productId) {
+        throw new BadRequestException('Each line needs productId or adHocDescription');
+      }
+
       const product = await this.productModel
         .findOne({
           _id: line.productId,

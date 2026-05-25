@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PageHeader } from '../components/ui/PageHeader';
 import { SerialPickModal, type PosProduct } from '../components/pos/SerialPickModal';
@@ -8,6 +8,8 @@ import type { SalePaymentPayload } from '../components/pos/PosCheckout';
 import { ReceiptDetailModal } from '../components/pos/ReceiptDetailModal';
 import { TodayReceiptsPanel } from '../components/pos/TodayReceiptsPanel';
 import { VariantPickModal } from '../components/pos/VariantPickModal';
+import { QuickSaleModal } from '../components/pos/QuickSaleModal';
+import { SalePrintPromptModal } from '../components/pos/SalePrintPromptModal';
 import { api } from '../lib/api';
 
 const REPAIR_SECTION_ID = '__repairs__';
@@ -78,6 +80,7 @@ export function PosPage() {
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [serialPickProduct, setSerialPickProduct] = useState<PosProduct | null>(null);
   const [variantPickProduct, setVariantPickProduct] = useState<PosProduct | null>(null);
+  const [quickSaleOpen, setQuickSaleOpen] = useState(false);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedSearch(catalogSearch.trim()), 300);
@@ -121,6 +124,9 @@ export function PosPage() {
   const [cart, setCart] = useState<CartLine[]>([]);
   const [lastOrderId, setLastOrderId] = useState<string | null>(null);
   const [receiptDetailId, setReceiptDetailId] = useState<string | null>(null);
+  const [printPromptOpen, setPrintPromptOpen] = useState(false);
+  const [pendingPayment, setPendingPayment] = useState<SalePaymentPayload | null>(null);
+  const printAfterSaleRef = useRef(false);
 
   const cartSerialIds = useMemo(
     () => new Set(cart.filter((c) => c.serialUnitId).map((c) => c.serialUnitId!)),
@@ -140,24 +146,66 @@ export function PosPage() {
     (c) => c._id === selectedCategoryId,
   );
 
+  const total = useMemo(
+    () => cart.reduce((s, l) => s + l.price * l.qty, 0),
+    [cart],
+  );
+
+  function requestCheckout(payment: SalePaymentPayload) {
+    setPendingPayment(payment);
+    setPrintPromptOpen(true);
+  }
+
+  function cancelCheckoutPrompt() {
+    if (sale.isPending) return;
+    setPrintPromptOpen(false);
+    setPendingPayment(null);
+  }
+
+  function confirmCheckout(printReceipt: boolean) {
+    if (!pendingPayment || sale.isPending) return;
+    printAfterSaleRef.current = printReceipt;
+    setPrintPromptOpen(false);
+    sale.mutate(pendingPayment);
+    setPendingPayment(null);
+  }
+
   const sale = useMutation({
     mutationFn: (payment: SalePaymentPayload) =>
       api.createSale({
         ...payment,
-        lines: cart.map((c) => ({
-          productId: c.productId,
-          quantity: c.qty,
-          unitPriceIncVat: c.price,
-          serialUnitId: c.serialUnitId,
-          sn: c.sn,
-          workOrderId: c.workOrderId,
-        })),
+        lines: cart.map((c) =>
+          c.adHoc
+            ? {
+                adHocDescription: c.name,
+                quantity: c.qty,
+                unitPriceIncVat: c.price,
+                taxCategoryId: c.taxCategoryId,
+                catalogCategoryId: c.catalogCategoryId,
+                costPreTax: c.costPrice,
+              }
+            : {
+                productId: c.productId!,
+                quantity: c.qty,
+                unitPriceIncVat: c.price,
+                serialUnitId: c.serialUnitId,
+                sn: c.sn,
+                workOrderId: c.workOrderId,
+              },
+        ),
         workOrderIds: cart.filter((c) => c.workOrderId).map((c) => c.workOrderId!),
       }),
+    onError: () => {
+      printAfterSaleRef.current = false;
+    },
     onSuccess: (order) => {
       setCart([]);
       setLastOrderId(order._id);
       setSelectedCategoryId(null);
+      if (printAfterSaleRef.current) {
+        printAfterSaleRef.current = false;
+        void openReceiptPrint(order._id);
+      }
       qc.invalidateQueries({ queryKey: ['orders-today'] });
       qc.invalidateQueries({ queryKey: ['inventory'] });
       qc.invalidateQueries({ queryKey: ['serials'] });
@@ -254,6 +302,18 @@ export function PosPage() {
     setCart(next);
   }
 
+  function updateLinePrice(index: number, price: number) {
+    const line = cart[index];
+    if (!line || line.workOrderId) return;
+    const next = [...cart];
+    next[index] = { ...line, price };
+    setCart(next);
+  }
+
+  function addQuickSaleLine(line: CartLine) {
+    setCart([...cart, line]);
+  }
+
   function addWorkOrderToCart(wo: PayableWorkOrder) {
     if (!repairProductId || cartWorkOrderIds.has(wo._id)) return;
     const label = [wo.docNumber, wo.issueDescription].filter(Boolean).join(' — ');
@@ -269,7 +329,6 @@ export function PosPage() {
     ]);
   }
 
-  const total = cart.reduce((s, c) => s + c.price * c.qty, 0);
   const cats = (categories as { _id: string; name: string }[] | undefined) ?? [];
   const productList = (products as PosProduct[] | undefined) ?? [];
   const searchProductList = (searchProducts as PosProduct[] | undefined) ?? [];
@@ -289,7 +348,7 @@ export function PosPage() {
   }
 
   return (
-    <div className="page-content">
+    <div className="page-content page-content--pos">
       <PageHeader title={t('pos.title')} />
       <div className="pos-layout">
         <div className="section-card pos-catalog-panel">
@@ -305,14 +364,21 @@ export function PosPage() {
                     ← {t('pos.backToCatalogs')}
                   </button>
                 )}
-                <h3 className="pos-catalog-head__title">
-                  {selectedCategoryId == null
-                    ? t('pos.selectCatalog')
-                    : selectedCategoryId === REPAIR_SECTION_ID
+                {selectedCategoryId != null && (
+                  <h3 className="pos-catalog-head__title">
+                    {selectedCategoryId === REPAIR_SECTION_ID
                       ? t('pos.repairSection')
                       : selectedCategory?.name}
-                </h3>
+                  </h3>
+                )}
               </div>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm pos-quick-sale-btn"
+                onClick={() => setQuickSaleOpen(true)}
+              >
+                {t('pos.quickSale')}
+              </button>
               <div className="pos-catalog-search">
               <span className="pos-catalog-search__icon" aria-hidden>
                 ⌕
@@ -497,11 +563,12 @@ export function PosPage() {
         <PosCartPanel
           lines={cart}
           total={total}
-          checkoutDisabled={!cart.length}
+          checkoutDisabled={!cart.length || printPromptOpen}
           checkoutPending={sale.isPending}
           onRemove={removeLine}
           onUpdateQty={updateLineQty}
-          onCheckout={(payment) => sale.mutate(payment)}
+          onUpdatePrice={updateLinePrice}
+          onCheckout={requestCheckout}
         >
           {sale.error && (
             <p className="status-fail pos-cart-feedback">{(sale.error as Error).message}</p>
@@ -547,6 +614,23 @@ export function PosPage() {
             setSerialPickProduct(null);
           }}
           onClose={() => setSerialPickProduct(null)}
+        />
+      )}
+
+      {quickSaleOpen && (
+        <QuickSaleModal
+          onAdd={addQuickSaleLine}
+          onClose={() => setQuickSaleOpen(false)}
+        />
+      )}
+
+      {printPromptOpen && pendingPayment && (
+        <SalePrintPromptModal
+          total={total}
+          pending={sale.isPending}
+          onPrintAndComplete={() => confirmCheckout(true)}
+          onCompleteWithoutPrint={() => confirmCheckout(false)}
+          onCancel={cancelCheckoutPrompt}
         />
       )}
 

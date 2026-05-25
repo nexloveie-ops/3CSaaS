@@ -20,7 +20,8 @@ import {
 import { AuditService } from '../common/services/audit.service';
 import { DocumentSequenceService } from '../common/services/document-sequence.service';
 import { CompanyService } from '../company/company.service';
-import { CreateInboundDto } from './dto/create-inbound.dto';
+import { ProductService } from '../product/product.service';
+import { CreateInboundDto, InboundLineDto } from './dto/create-inbound.dto';
 
 @Injectable()
 export class InventoryService {
@@ -33,6 +34,7 @@ export class InventoryService {
     @InjectModel(SerialUnit.name) private serialModel: Model<SerialUnitDocument>,
     @InjectModel(SerialEvent.name) private eventModel: Model<SerialEventDocument>,
     private companyService: CompanyService,
+    private productService: ProductService,
     private docSeq: DocumentSequenceService,
     private audit: AuditService,
   ) {}
@@ -53,6 +55,49 @@ export class InventoryService {
       .lean();
   }
 
+  async listInbound(
+    userId: string,
+    companyId: string,
+    storeId: string,
+    from?: string,
+    to?: string,
+  ) {
+    await this.companyService.assertMember(userId, companyId);
+    const filter: Record<string, unknown> = {
+      companyId: new Types.ObjectId(companyId),
+      storeId: new Types.ObjectId(storeId),
+    };
+    if (from || to) {
+      const range: Record<string, Date> = {};
+      if (from) {
+        const d = new Date(from);
+        if (Number.isNaN(d.getTime())) {
+          throw new BadRequestException('Invalid from date');
+        }
+        d.setHours(0, 0, 0, 0);
+        range.$gte = d;
+      }
+      if (to) {
+        const d = new Date(to);
+        if (Number.isNaN(d.getTime())) {
+          throw new BadRequestException('Invalid to date');
+        }
+        d.setHours(23, 59, 59, 999);
+        range.$lte = d;
+      }
+      filter.$or = [
+        { receivedAt: range },
+        { receivedAt: { $exists: false }, createdAt: range },
+        { receivedAt: null, createdAt: range },
+      ];
+    }
+    return this.inboundModel
+      .find(filter)
+      .sort({ receivedAt: -1, createdAt: -1 })
+      .populate('lines.productId', 'name productType skuCode')
+      .lean();
+  }
+
   async createInbound(
     userId: string,
     companyId: string,
@@ -61,8 +106,37 @@ export class InventoryService {
   ) {
     await this.companyService.assertMember(userId, companyId);
     const docNumber = await this.docSeq.next(companyId, 'inbound');
+    const receivedAt = dto.receivedAt ? new Date(dto.receivedAt) : new Date();
+    if (Number.isNaN(receivedAt.getTime())) {
+      throw new BadRequestException('Invalid receivedAt');
+    }
+
+    const resolvedLines: {
+      productId: string;
+      quantity: number;
+      unitCost?: number;
+      retailPrice?: number;
+      stockOnHand?: number;
+      serialNumbers?: string[];
+    }[] = [];
 
     for (const line of dto.lines) {
+      const productId = await this.resolveLineProductId(
+        userId,
+        companyId,
+        line,
+      );
+      resolvedLines.push({
+        productId,
+        quantity: line.quantity,
+        unitCost: line.unitCost,
+        retailPrice: line.retailPrice,
+        stockOnHand: line.stockOnHand,
+        serialNumbers: line.serialNumbers,
+      });
+    }
+
+    for (const line of resolvedLines) {
       const product = await this.productModel.findOne({
         _id: line.productId,
         companyId: new Types.ObjectId(companyId),
@@ -74,7 +148,26 @@ export class InventoryService {
         );
       }
 
+      const productUpdates: { costPrice?: number; retailPrice?: number } = {};
+      if (line.unitCost !== undefined) productUpdates.costPrice = line.unitCost;
+      if (line.retailPrice !== undefined) productUpdates.retailPrice = line.retailPrice;
+      if (Object.keys(productUpdates).length > 0) {
+        await this.productModel.updateOne({ _id: product._id }, { $set: productUpdates });
+      }
+
       const unitCost = line.unitCost ?? product.costPrice;
+
+      if (line.stockOnHand !== undefined && product.productType !== 'serialized') {
+        await this.positionModel.findOneAndUpdate(
+          {
+            companyId: new Types.ObjectId(companyId),
+            storeId: new Types.ObjectId(storeId),
+            productId: product._id,
+          },
+          { $set: { quantity: line.stockOnHand } },
+          { upsert: true },
+        );
+      }
 
       if (product.productType === 'serialized') {
         if (!line.serialNumbers?.length) {
@@ -118,14 +211,16 @@ export class InventoryService {
       companyId: new Types.ObjectId(companyId),
       storeId: new Types.ObjectId(storeId),
       docNumber,
-      lines: dto.lines.map((l) => ({
+      supplier: dto.supplier.trim(),
+      receivedAt,
+      lines: resolvedLines.map((l) => ({
         productId: new Types.ObjectId(l.productId),
         quantity: l.quantity,
         unitCost: l.unitCost,
         serialNumbers: l.serialNumbers,
       })),
       createdByUserId: new Types.ObjectId(userId),
-      notes: dto.notes,
+      notes: dto.notes?.trim() || undefined,
     });
 
     void this.audit.log({
@@ -135,10 +230,36 @@ export class InventoryService {
       action: 'inventory.inbound',
       entityType: 'inbound_receipt',
       entityId: receipt._id.toString(),
-      metadata: { docNumber, lineCount: dto.lines.length },
+      metadata: { docNumber, lineCount: dto.lines.length, supplier: dto.supplier },
     });
 
     return receipt;
+  }
+
+  private async resolveLineProductId(
+    userId: string,
+    companyId: string,
+    line: InboundLineDto,
+  ): Promise<string> {
+    if (line.productId && line.newProduct) {
+      throw new BadRequestException('Line must have productId or newProduct, not both');
+    }
+    if (!line.productId && !line.newProduct) {
+      throw new BadRequestException('Line must have productId or newProduct');
+    }
+    if (line.productId) return line.productId;
+
+    const np = line.newProduct!;
+    const created = await this.productService.create(userId, companyId, {
+      productType: np.productType,
+      name: np.name.trim(),
+      taxCategoryId: np.taxCategoryId,
+      costPrice: np.costPrice,
+      catalogCategoryId: np.catalogCategoryId,
+      retailPrice: np.retailPrice,
+      skuCode: np.skuCode,
+    });
+    return created._id.toString();
   }
 
   async adjustQty(

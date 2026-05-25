@@ -5,8 +5,14 @@ export type OrderDocument = HydratedDocument<Order>;
 
 @Schema({ _id: false })
 export class OrderLine {
-  @Prop({ type: Types.ObjectId, ref: 'Product', required: true })
-  productId!: Types.ObjectId;
+  @Prop({ type: Types.ObjectId, ref: 'Product' })
+  productId?: Types.ObjectId;
+
+  @Prop({ default: false })
+  adHoc?: boolean;
+
+  @Prop({ type: Types.ObjectId, ref: 'CatalogCategory' })
+  catalogCategoryId?: Types.ObjectId;
 
   @Prop({ required: true, trim: true })
   productName!: string;

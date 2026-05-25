@@ -55,7 +55,6 @@ const NAV_GROUPS: { id: string; labelKey: string; items: NavItem[] }[] = [
       { to: '/dashboard/transfers', key: 'nav.transfers', module: NAV_MODULE_REQUIREMENTS['/dashboard/transfers'] },
       { to: '/dashboard/price-list', key: 'nav.priceList', module: NAV_MODULE_REQUIREMENTS['/dashboard/price-list'] },
       { to: '/dashboard/reports', key: 'nav.reports', module: NAV_MODULE_REQUIREMENTS['/dashboard/reports'] },
-      { to: '/dashboard/credit-notes', key: 'nav.creditNotes', module: NAV_MODULE_REQUIREMENTS['/dashboard/credit-notes'] },
     ],
   },
   {
@@ -121,11 +120,14 @@ export function Layout() {
     enabled: !!token,
   });
 
-  const { data: stores } = useQuery({
+  const { data: stores, isFetched: storesFetched } = useQuery({
     queryKey: ['stores', companyId],
     queryFn: () => api.listStores(),
     enabled: !!token && !!companyId,
   });
+
+  const companyStores = (stores as { _id: string }[] | undefined) ?? [];
+  const transfersEnabled = companyStores.length > 1;
 
   const { data: company } = useQuery({
     queryKey: ['company', companyId],
@@ -208,11 +210,21 @@ export function Layout() {
         }
         if (n.roles && (!effectiveRole || !n.roles.includes(effectiveRole))) return false;
         if (n.module && mods?.length && !mods.includes(n.module)) return false;
+        if (n.to === '/dashboard/transfers' && (!storesFetched || !transfersEnabled)) {
+          return false;
+        }
         return true;
       }),
     })).filter((g) => g.items.length > 0);
     return groups;
-  }, [enabledModules, company?.enabledModules, effectiveRole]);
+  }, [
+    enabledModules,
+    company?.enabledModules,
+    effectiveRole,
+    isCashierAccount,
+    storesFetched,
+    transfersEnabled,
+  ]);
 
   const readOnly =
     subscriptionStatus === 'read_only' || company?.subscriptionStatus === 'read_only';
@@ -247,6 +259,15 @@ export function Layout() {
 
   if (isCashier && !isCashierRouteAllowed(location.pathname)) {
     return <Navigate to="/dashboard/pos" replace />;
+  }
+
+  if (
+    storesFetched &&
+    companyId &&
+    !transfersEnabled &&
+    location.pathname.startsWith('/dashboard/transfers')
+  ) {
+    return <Navigate to="/dashboard" replace />;
   }
 
   return (

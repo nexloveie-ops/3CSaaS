@@ -14,6 +14,7 @@ import {
 } from '@lz3c/db';
 import { CommonModule } from '../common/common.module';
 import { CompanyModule } from '../company/company.module';
+import { ProductModule } from '../product/product.module';
 import { InventoryController } from './inventory.controller';
 import { InventoryService } from './inventory.service';
 
@@ -21,6 +22,7 @@ import { InventoryService } from './inventory.service';
   imports: [
     CommonModule,
     CompanyModule,
+    ProductModule,
     MongooseModule.forFeature([
       { name: InventoryPosition.name, schema: InventoryPositionSchema },
       { name: InboundReceipt.name, schema: InboundReceiptSchema },

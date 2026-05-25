@@ -83,19 +83,37 @@ export class WorkOrderService {
     };
   }
 
+  private async repairServiceTaxCategory(companyId: Types.ObjectId) {
+    const servicesTax = await this.taxModel
+      .findOne({ companyId, scheme: 'standard_13_5', isActive: true })
+      .lean();
+    if (servicesTax) return servicesTax;
+
+    const defaultTax = await this.taxModel
+      .findOne({ companyId, isDefault: true, isActive: true })
+      .lean();
+    if (defaultTax) return defaultTax;
+
+    return this.taxModel.findOne({ companyId, isActive: true }).lean();
+  }
+
   private async ensureRepairServiceProduct(companyId: string) {
     const cid = new Types.ObjectId(companyId);
+    const tax = await this.repairServiceTaxCategory(cid);
+    if (!tax) throw new BadRequestException('No tax category for repair product');
+
     const existing = await this.productModel.findOne({
       companyId: cid,
       productType: 'service',
       skuCode: 'REPAIR-SVC',
     });
-    if (existing) return existing;
-
-    const tax =
-      (await this.taxModel.findOne({ companyId: cid, isDefault: true }).lean()) ??
-      (await this.taxModel.findOne({ companyId: cid }).lean());
-    if (!tax) throw new BadRequestException('No tax category for repair product');
+    if (existing) {
+      if (!existing.taxCategoryId?.equals(tax._id)) {
+        existing.taxCategoryId = tax._id;
+        await existing.save();
+      }
+      return existing;
+    }
 
     return this.productModel.create({
       companyId: cid,

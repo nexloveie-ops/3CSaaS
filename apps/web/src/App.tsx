@@ -12,7 +12,6 @@ import { PosPage } from './pages/PosPage';
 import { CustomersPage } from './pages/CustomersPage';
 import { RepairsPage } from './pages/RepairsPage';
 import { PreordersPage } from './pages/PreordersPage';
-import { CreditNotesPage } from './pages/CreditNotesPage';
 import { PriceListPage } from './pages/PriceListPage';
 import { B2bPage } from './pages/B2bPage';
 import { TransfersPage } from './pages/TransfersPage';
@@ -116,7 +115,6 @@ export default function App() {
         <Route path="repairs" element={<RepairsPage />} />
         <Route path="price-list" element={<PriceListPage />} />
         <Route path="preorders" element={<PreordersPage />} />
-        <Route path="credit-notes" element={<CreditNotesPage />} />
         <Route path="b2b" element={<B2bPage />} />
         <Route path="warehouse" element={<WarehousePage />} />
         <Route path="chain" element={<ChainPage />} />

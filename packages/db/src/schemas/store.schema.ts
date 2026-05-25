@@ -24,6 +24,10 @@ export class Store {
   @Prop({ trim: true, maxlength: 4000 })
   repairTerms?: string;
 
+  /** Terms & conditions printed at the bottom of POS sales receipts. */
+  @Prop({ trim: true, maxlength: 4000 })
+  salesTerms?: string;
+
   @Prop({ default: false })
   warehouseEnabled!: boolean;
 

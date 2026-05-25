@@ -76,6 +76,32 @@ export function VariantPickModal({ product, onSelect, onClose }: Props) {
 
   const nextDimIndex = selected.length;
 
+  function variantsForPrefix(prefix: string[]): VariantRow[] {
+    return variants.filter((v) => {
+      for (let i = 0; i < prefix.length; i++) {
+        if (v.variantValues[i] !== prefix[i]) return false;
+      }
+      return true;
+    });
+  }
+
+  function formatPriceLabel(rows: VariantRow[]): string | null {
+    if (!rows.length) return null;
+    const prices = rows
+      .map((v) => v.retailPrice ?? v.costPrice)
+      .filter((p) => Number.isFinite(p) && p >= 0);
+    if (!prices.length) return null;
+    const min = Math.min(...prices);
+    const max = Math.max(...prices);
+    if (min === max) return `€${min.toFixed(2)}`;
+    return `€${min.toFixed(2)} – €${max.toFixed(2)}`;
+  }
+
+  function priceLabelForOption(dimIndex: number, value: string): string | null {
+    if (dimIndex > nextDimIndex) return null;
+    return formatPriceLabel(variantsForPrefix([...selected.slice(0, dimIndex), value]));
+  }
+
   function pickValue(dimIndex: number, value: string) {
     const next = [...selected.slice(0, dimIndex), value];
     setSelected(next);
@@ -120,6 +146,10 @@ export function VariantPickModal({ product, onSelect, onClose }: Props) {
                 if (!opts.length) return null;
                 const isCurrent = dimIndex === nextDimIndex;
                 const isDone = dimIndex < selected.length;
+                const pickedPrice =
+                  isDone && selected[dimIndex]
+                    ? priceLabelForOption(dimIndex, selected[dimIndex])
+                    : null;
                 return (
                   <section
                     key={dim.name}
@@ -136,7 +166,10 @@ export function VariantPickModal({ product, onSelect, onClose }: Props) {
                       <div className="pos-variant-step__titles">
                         <h4 className="pos-variant-step__label">{dim.name}</h4>
                         {isDone && selected[dimIndex] && (
-                          <span className="pos-variant-step__picked">{selected[dimIndex]}</span>
+                          <span className="pos-variant-step__picked">
+                            {selected[dimIndex]}
+                            {pickedPrice && <> · {pickedPrice}</>}
+                          </span>
                         )}
                         {isCurrent && dimensions.length > 1 && (
                           <span className="pos-variant-step__meta">
@@ -155,6 +188,7 @@ export function VariantPickModal({ product, onSelect, onClose }: Props) {
                     >
                       {opts.map((value) => {
                         const active = selected[dimIndex] === value;
+                        const priceLabel = priceLabelForOption(dimIndex, value);
                         return (
                           <button
                             key={value}
@@ -167,7 +201,10 @@ export function VariantPickModal({ product, onSelect, onClose }: Props) {
                             disabled={dimIndex > nextDimIndex}
                             onClick={() => pickValue(dimIndex, value)}
                           >
-                            {value}
+                            <span className="pos-variant-option__label">{value}</span>
+                            {priceLabel && (
+                              <span className="pos-variant-option__price">{priceLabel}</span>
+                            )}
                           </button>
                         );
                       })}

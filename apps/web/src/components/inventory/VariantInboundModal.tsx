@@ -9,6 +9,14 @@ type CatalogProduct = {
   variantDimensions?: { name: string; values: string[] }[];
 };
 
+type VariantSku = {
+  _id: string;
+  name: string;
+  variantValues?: string[];
+  costPrice: number;
+  retailPrice?: number;
+};
+
 type PositionRow = {
   productId:
     | string
@@ -19,13 +27,42 @@ type PositionRow = {
   quantity: number;
 };
 
+export type VariantInboundLine = {
+  productId: string;
+  quantity: number;
+  unitCost?: number;
+  retailPrice?: number;
+  stockOnHand?: number;
+};
+
+type RowEdit = {
+  addQty: string;
+  cost: string;
+  retail: string;
+  onHand: string;
+};
+
 type Props = {
   product: CatalogProduct;
   positions: PositionRow[];
-  onConfirm: (lines: { productId: string; quantity: number }[]) => void;
+  onConfirm: (lines: VariantInboundLine[]) => void;
   onClose: () => void;
   pending?: boolean;
 };
+
+function parseMoney(value: string): number | undefined {
+  const t = value.trim();
+  if (t === '') return undefined;
+  const n = Number(t);
+  if (!Number.isFinite(n) || n < 0) return undefined;
+  return Math.round(n * 100) / 100;
+}
+
+function parseQty(value: string): number {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 0) return 0;
+  return Math.floor(n);
+}
 
 export function VariantInboundModal({
   product,
@@ -35,7 +72,7 @@ export function VariantInboundModal({
   pending,
 }: Props) {
   const { t } = useTranslation();
-  const [addByVariantId, setAddByVariantId] = useState<Record<string, string>>({});
+  const [rowEdits, setRowEdits] = useState<Record<string, RowEdit>>({});
   const [bulkQty, setBulkQty] = useState('');
 
   const { data, isLoading } = useQuery({
@@ -43,7 +80,7 @@ export function VariantInboundModal({
     queryFn: () => api.listProductVariants(product._id),
   });
 
-  const variants = data?.variants ?? [];
+  const variants = (data?.variants ?? []) as VariantSku[];
   const dimensions = data?.parent.variantDimensions ?? product.variantDimensions ?? [];
 
   const onHandById = useMemo(() => {
@@ -58,32 +95,59 @@ export function VariantInboundModal({
 
   useEffect(() => {
     if (!variants.length) return;
-    setAddByVariantId((prev) => {
+    setRowEdits((prev) => {
       const next = { ...prev };
       for (const v of variants) {
-        if (next[v._id] === undefined) next[v._id] = '';
+        if (next[v._id]) continue;
+        next[v._id] = {
+          addQty: '',
+          cost: String(v.costPrice ?? 0),
+          retail: v.retailPrice != null ? String(v.retailPrice) : '',
+          onHand: String(onHandById.get(v._id) ?? 0),
+        };
       }
       return next;
     });
-  }, [variants]);
+  }, [variants, onHandById]);
 
   const linesToSubmit = useMemo(() => {
     return variants
-      .map((v) => ({
-        productId: v._id,
-        quantity: Number(addByVariantId[v._id] ?? 0),
-      }))
-      .filter((l) => l.quantity > 0);
-  }, [variants, addByVariantId]);
+      .map((v) => {
+        const edit = rowEdits[v._id];
+        if (!edit) return null;
+        const quantity = parseQty(edit.addQty);
+        if (quantity <= 0) return null;
+        const unitCost = parseMoney(edit.cost);
+        const retailPrice = parseMoney(edit.retail);
+        const stockOnHand = parseQty(edit.onHand);
+        const baseline = onHandById.get(v._id) ?? 0;
+        return {
+          productId: v._id,
+          quantity,
+          unitCost,
+          retailPrice,
+          stockOnHand: stockOnHand !== baseline ? stockOnHand : undefined,
+        };
+      })
+      .filter((l): l is VariantInboundLine => l != null);
+  }, [variants, rowEdits, onHandById]);
+
+  function updateRow(id: string, patch: Partial<RowEdit>) {
+    setRowEdits((prev) => ({
+      ...prev,
+      [id]: { ...prev[id]!, ...patch },
+    }));
+  }
 
   function applyBulkQtyToAll() {
     const n = Number(bulkQty);
     if (!Number.isFinite(n) || n < 0) return;
     const value = n === 0 ? '' : String(Math.floor(n));
-    setAddByVariantId((prev) => {
+    setRowEdits((prev) => {
       const next = { ...prev };
       for (const v of variants) {
-        next[v._id] = value;
+        if (!next[v._id]) continue;
+        next[v._id] = { ...next[v._id]!, addQty: value };
       }
       return next;
     });
@@ -92,8 +156,7 @@ export function VariantInboundModal({
   return (
     <div className="pos-modal-backdrop" role="presentation" onClick={onClose}>
       <div
-        className="pos-modal pos-modal--variant-pick"
-        style={{ maxWidth: 560 }}
+        className="pos-modal pos-modal--variant-pick pos-modal--variant-inbound"
         role="dialog"
         onClick={(e) => e.stopPropagation()}
       >
@@ -111,30 +174,20 @@ export function VariantInboundModal({
           )}
           {!isLoading && variants.length > 0 && (
             <>
-              <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
-                {t('inventory.variantInboundHint')}
-              </p>
+              <p className="variant-inbound-hint">{t('inventory.variantInboundEditHint')}</p>
               {dimensions.map((dim) => (
                 <div key={dim.name} className="pos-variant-dimension-label">
                   {dim.name}: {dim.values.join(', ')}
                 </div>
               ))}
-              <div
-                className="inventory-bulk-qty-row"
-                style={{
-                  display: 'flex',
-                  gap: '0.5rem',
-                  alignItems: 'flex-end',
-                  flexWrap: 'wrap',
-                  marginTop: '0.75rem',
-                }}
-              >
-                <label className="form-field" style={{ flex: '1 1 120px', marginBottom: 0 }}>
+              <div className="inventory-bulk-qty-row inventory-bulk-qty-row--variant-inbound">
+                <label className="form-field inventory-bulk-qty-row__field">
                   {t('inventory.bulkAddQty')}
                   <input
                     type="number"
                     min={0}
                     step={1}
+                    className="inventory-bulk-qty-row__input"
                     value={bulkQty}
                     onChange={(e) => setBulkQty(e.target.value)}
                     onKeyDown={(e) => {
@@ -155,13 +208,21 @@ export function VariantInboundModal({
                   {t('inventory.applyQtyToAll')}
                 </button>
               </div>
-              <div style={{ maxHeight: 360, overflow: 'auto', marginTop: '0.75rem' }}>
-                <table style={{ width: '100%', fontSize: '0.8125rem', borderCollapse: 'collapse' }}>
+              <div className="variant-inbound-table-wrap">
+                <table className="variant-inbound-table">
+                  <colgroup>
+                    <col className="variant-inbound-table__col-label" />
+                    <col className="variant-inbound-table__col-num" span={4} />
+                  </colgroup>
                   <thead>
                     <tr>
-                      <th align="left">{t('inventory.variantSku')}</th>
-                      <th align="right">{t('inventory.currentQty')}</th>
-                      <th align="right">{t('inventory.addQty')}</th>
+                      <th className="variant-inbound-table__th-label">
+                        {t('inventory.variantSku')}
+                      </th>
+                      <th className="variant-inbound-table__th-num">{t('inventory.currentQty')}</th>
+                      <th className="variant-inbound-table__th-num">{t('inventory.colCost')}</th>
+                      <th className="variant-inbound-table__th-num">{t('inventory.colRetail')}</th>
+                      <th className="variant-inbound-table__th-num">{t('inventory.addQty')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -170,23 +231,53 @@ export function VariantInboundModal({
                         v.variantValues?.length > 0
                           ? v.variantValues.join(' · ')
                           : v.name;
+                      const edit = rowEdits[v._id] ?? {
+                        addQty: '',
+                        cost: '',
+                        retail: '',
+                        onHand: '0',
+                      };
                       return (
                         <tr key={v._id}>
-                          <td style={{ padding: '0.35rem 0' }}>{label}</td>
-                          <td align="right">{onHandById.get(v._id) ?? 0}</td>
-                          <td align="right">
+                          <td className="variant-inbound-table__label">{label}</td>
+                          <td className="variant-inbound-table__num">
                             <input
                               type="number"
                               min={0}
                               step={1}
-                              value={addByVariantId[v._id] ?? ''}
-                              onChange={(e) =>
-                                setAddByVariantId((prev) => ({
-                                  ...prev,
-                                  [v._id]: e.target.value,
-                                }))
-                              }
-                              style={{ width: 72 }}
+                              className="variant-inbound-table__input"
+                              value={edit.onHand}
+                              onChange={(e) => updateRow(v._id, { onHand: e.target.value })}
+                            />
+                          </td>
+                          <td className="variant-inbound-table__num">
+                            <input
+                              type="number"
+                              min={0}
+                              step={0.01}
+                              className="variant-inbound-table__input"
+                              value={edit.cost}
+                              onChange={(e) => updateRow(v._id, { cost: e.target.value })}
+                            />
+                          </td>
+                          <td className="variant-inbound-table__num">
+                            <input
+                              type="number"
+                              min={0}
+                              step={0.01}
+                              className="variant-inbound-table__input"
+                              value={edit.retail}
+                              onChange={(e) => updateRow(v._id, { retail: e.target.value })}
+                            />
+                          </td>
+                          <td className="variant-inbound-table__num">
+                            <input
+                              type="number"
+                              min={0}
+                              step={1}
+                              className="variant-inbound-table__input"
+                              value={edit.addQty}
+                              onChange={(e) => updateRow(v._id, { addQty: e.target.value })}
                               placeholder="0"
                             />
                           </td>
@@ -196,17 +287,16 @@ export function VariantInboundModal({
                   </tbody>
                 </table>
               </div>
-              <p className="pos-variant-selected-hint" style={{ marginTop: '0.75rem' }}>
+              <p className="pos-variant-selected-hint">
                 {t('inventory.linesToAdd', { count: linesToSubmit.length })}
               </p>
               <button
                 type="button"
-                className="btn btn-primary"
-                style={{ width: '100%', marginTop: '0.5rem' }}
+                className="btn btn-primary variant-inbound-submit"
                 disabled={pending || linesToSubmit.length === 0}
                 onClick={() => onConfirm(linesToSubmit)}
               >
-                {t('inventory.confirmInbound')}
+                {t('inventory.addToBatch')}
               </button>
             </>
           )}

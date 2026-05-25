@@ -77,3 +77,19 @@ export function calculateLineTax(input: TaxLineInput): TaxLineResult {
   const vat = round2(((gross - cost) * 23) / 123);
   return { netPreTax: round2(gross - vat), vatAmount: Math.max(0, vat), gross: round2(gross) };
 }
+
+/** Short label for reports — percentage only, no qualifiers like "(New goods)". */
+export function taxSchemeReportLabel(scheme: TaxScheme | string): string {
+  switch (scheme) {
+    case 'standard_13_5':
+      return '13.5% VAT';
+    case 'standard_23':
+      return '23% VAT';
+    case 'margin_23':
+      return 'Margin VAT';
+    case 'zero':
+      return '0% VAT';
+    default:
+      return scheme;
+  }
+}

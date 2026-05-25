@@ -18,6 +18,7 @@ export interface ReceiptRenderInput {
     sn?: string;
   }[];
   totalIncVat: number;
+  salesTerms?: string;
 }
 
 @Injectable()
@@ -50,6 +51,9 @@ export class PosReceiptService {
   td { padding: 4px 0; vertical-align: top; }
   .total { font-size: 14px; font-weight: bold; text-align: right; margin-top: 12px; border-top: 1px dashed #000; padding-top: 8px; }
   .thanks { text-align: center; margin-top: 16px; font-size: 11px; }
+  .terms { margin-top: 12px; padding-top: 8px; border-top: 1px dashed #000; font-size: 10px; line-height: 1.4; text-align: left; }
+  .terms-title { font-weight: bold; margin-bottom: 4px; text-align: center; }
+  .terms-body { white-space: pre-wrap; word-break: break-word; }
   @media screen { body { border: 1px dashed #ccc; padding: 12px; } button.print-btn { margin-bottom: 8px; } }
   @media print { button.print-btn { display: none; } }
 </style></head><body>
@@ -69,9 +73,16 @@ ${data.paymentLines.map((line) => `<div class="pay-line">${escapeHtml(line)}</di
   <tbody>${rows}</tbody>
 </table>
 <p class="total">TOTAL €${data.totalIncVat.toFixed(2)}</p>
+${renderSalesTermsBlock(data.salesTerms)}
 <p class="thanks">Thank you for your purchase</p>
 </body></html>`;
   }
+}
+
+function renderSalesTermsBlock(salesTerms?: string): string {
+  const text = salesTerms?.trim();
+  if (!text) return '';
+  return `<div class="terms"><div class="terms-title">Terms &amp; conditions</div><div class="terms-body">${escapeHtml(text)}</div></div>`;
 }
 
 function escapeHtml(s: string) {

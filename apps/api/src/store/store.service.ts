@@ -89,4 +89,21 @@ export class StoreService {
     await store.save();
     return store;
   }
+
+  async updateSalesTerms(
+    userId: string,
+    companyId: string,
+    storeId: string,
+    salesTerms: string,
+  ) {
+    await this.companyService.assertStoreAccess(userId, companyId, storeId);
+    const store = await this.storeModel.findOne({
+      _id: storeId,
+      companyId: new Types.ObjectId(companyId),
+    });
+    if (!store) throw new NotFoundException('Store not found');
+    store.salesTerms = salesTerms.trim();
+    await store.save();
+    return store;
+  }
 }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 export type SalePaymentPayload = {
@@ -26,12 +26,28 @@ export function PosCheckout({ total, disabled, pending, onSubmit }: Props) {
   const [amountTendered, setAmountTendered] = useState('');
   const [mixedCash, setMixedCash] = useState('');
   const [mixedCard, setMixedCard] = useState('');
+  const prevTotalRef = useRef(total);
 
   useEffect(() => {
     if (method === 'cash' && !amountTendered) {
       setAmountTendered(total > 0 ? total.toFixed(2) : '');
     }
   }, [method, total]);
+
+  useEffect(() => {
+    if (method !== 'cash') {
+      prevTotalRef.current = total;
+      return;
+    }
+    const prev = prevTotalRef.current;
+    if (Math.abs(prev - total) >= 0.005) {
+      const tendered = parseAmount(amountTendered);
+      if (!amountTendered || Math.abs(tendered - prev) < 0.01) {
+        setAmountTendered(total > 0 ? total.toFixed(2) : '');
+      }
+    }
+    prevTotalRef.current = total;
+  }, [total, method, amountTendered]);
 
   const changeDue = useMemo(() => {
     if (method !== 'cash') return 0;

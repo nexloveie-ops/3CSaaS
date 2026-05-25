@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Headers, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Post, Query, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { RequireModule } from '../common/decorators/require-module.decorator';
@@ -21,6 +21,23 @@ export class InventoryController {
     @Headers('x-store-id') storeId: string,
   ) {
     return this.inventoryService.listPositions(user.userId, companyId, storeId);
+  }
+
+  @Get('inbound')
+  listInbound(
+    @CurrentUser() user: { userId: string },
+    @Headers('x-company-id') companyId: string,
+    @Headers('x-store-id') storeId: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.inventoryService.listInbound(
+      user.userId,
+      companyId,
+      storeId,
+      from,
+      to,
+    );
   }
 
   @Post('inbound')

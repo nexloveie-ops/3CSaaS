@@ -5,6 +5,8 @@ import {
   DailySummarySchema,
   Order,
   OrderSchema,
+  TaxCategory,
+  TaxCategorySchema,
   WorkOrder,
   WorkOrderSchema,
 } from '@lz3c/db';
@@ -19,6 +21,7 @@ import { ReportService } from './report.service';
       { name: Order.name, schema: OrderSchema },
       { name: WorkOrder.name, schema: WorkOrderSchema },
       { name: DailySummary.name, schema: DailySummarySchema },
+      { name: TaxCategory.name, schema: TaxCategorySchema },
     ]),
   ],
   controllers: [ReportController],

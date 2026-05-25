@@ -3,7 +3,6 @@ import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PageHeader } from '../components/ui/PageHeader';
 import { api } from '../lib/api';
-import { useContextStore } from '../stores/context';
 
 function printRepairReceiptHtml(html: string): Promise<void> {
   return new Promise((resolve) => {
@@ -115,10 +114,148 @@ function matchesModel(priceModel: string, input: string): boolean {
   return priceModel.toLowerCase() === m;
 }
 
+function nextStatus(flow: string, status: string): string | null {
+  const map = flow === 'send_out' ? SEND_OUT_STEPS : IN_STORE_STEPS;
+  return map[status] ?? null;
+}
+
+type WorkOrderCardProps = {
+  wo: WorkOrderRow;
+  compact?: boolean;
+  t: (key: string, opts?: { defaultValue?: string }) => string;
+  onComplete: (wo: WorkOrderRow) => void;
+  onTransition: (args: {
+    id: string;
+    status: string;
+    completionResult?: 'successful' | 'failed';
+  }) => void;
+  transitionPending: boolean;
+};
+
+function WorkOrderCard({
+  wo,
+  compact,
+  t,
+  onComplete,
+  onTransition,
+  transitionPending,
+}: WorkOrderCardProps) {
+  const next = nextStatus(wo.flowType, wo.status);
+  const deviceLabel = [wo.deviceBrand, wo.deviceModel].filter(Boolean).join(' ');
+  const sn = wo.imeiSn || wo.serialSn;
+  return (
+    <li className={compact ? 'repairs-active-item' : 'card'} style={compact ? undefined : { marginBottom: 8 }}>
+      <div className={compact ? 'repairs-active-item__head' : undefined}>
+        <strong>{wo.docNumber}</strong>
+        <span className="badge" style={compact ? undefined : { marginLeft: 8 }}>
+          {t(`repairs.status.${wo.status}`, { defaultValue: wo.status })}
+        </span>
+        {wo.completionResult && (
+          <span className="badge" style={compact ? undefined : { marginLeft: 4 }}>
+            {wo.completionResult === 'successful'
+              ? t('repairs.outcomeSuccessful')
+              : t('repairs.outcomeFailed')}
+          </span>
+        )}
+        {wo.flowType === 'send_out' && (
+          <span className="badge" style={compact ? undefined : { marginLeft: 4 }}>
+            {t('repairs.sendOut')}
+          </span>
+        )}
+      </div>
+      <div
+        className={compact ? 'repairs-active-item__meta' : undefined}
+        style={compact ? undefined : { fontSize: '0.875rem', marginTop: 4 }}
+      >
+        {wo.customerName || '—'} · {wo.customerPhone || '—'}
+        {deviceLabel && ` · ${deviceLabel}`}
+        {sn && ` · ${t('repairs.imeiSn')}: ${sn}`}
+      </div>
+      {wo.issueDescription && (
+        <div
+          className={compact ? 'repairs-active-item__issue' : undefined}
+          style={compact ? undefined : { fontSize: '0.875rem', color: 'var(--text-muted)' }}
+        >
+          {wo.issueDescription}
+        </div>
+      )}
+      {!compact && wo.repairLocation && (
+        <div style={{ fontSize: '0.8125rem' }}>
+          {t('repairs.repairLocation')}: {wo.repairLocation}
+        </div>
+      )}
+      {!compact && wo.expectedCompletionAt && (
+        <div style={{ fontSize: '0.8125rem' }}>
+          {t('repairs.expectedCompletion')}:{' '}
+          {new Date(wo.expectedCompletionAt).toLocaleDateString()}
+        </div>
+      )}
+      {wo.status === 'awaiting_payment' && (
+        <p className="form-hint" style={{ marginTop: 4 }}>
+          {t('repairs.payAtPos')}
+        </p>
+      )}
+      <div
+        className={compact ? 'repairs-active-item__price' : undefined}
+        style={compact ? undefined : { marginTop: 6 }}
+      >
+        €{wo.quotedPriceIncVat.toFixed(2)}
+      </div>
+      <div
+        className={compact ? 'repairs-active-item__actions' : 'repairs-wo-actions'}
+        style={compact ? undefined : { marginTop: 6 }}
+      >
+        {needsCompleteAction(wo) && (
+          <button
+            type="button"
+            className="btn btn-primary repairs-wo-action"
+            onClick={() => onComplete(wo)}
+          >
+            {t('repairs.completeRepair')}
+          </button>
+        )}
+        {next && (
+          <button
+            type="button"
+            className="btn btn-primary repairs-wo-action"
+            disabled={transitionPending}
+            onClick={() => onTransition({ id: wo._id, status: next })}
+          >
+            → {t(`repairs.status.${next}`, { defaultValue: next })}
+          </button>
+        )}
+        <button
+          type="button"
+          className="btn btn-secondary"
+          onClick={() => printCustomerReceipt(wo._id)}
+        >
+          {t('repairs.printCustomerReceipt')}
+        </button>
+        <button
+          type="button"
+          className="btn btn-secondary"
+          onClick={() => printRepairSlip(wo._id)}
+        >
+          {t('repairs.printRepairSlip')}
+        </button>
+        {wo.status !== 'cancelled' && wo.status !== 'completed' && (
+          <button
+            type="button"
+            className="btn btn-secondary repairs-wo-cancel"
+            disabled={transitionPending}
+            onClick={() => onTransition({ id: wo._id, status: 'cancelled' })}
+          >
+            {t('repairs.cancel')}
+          </button>
+        )}
+      </div>
+    </li>
+  );
+}
+
 export function RepairsPage() {
   const { t } = useTranslation();
   const qc = useQueryClient();
-  const storeId = useContextStore((s) => s.storeId);
 
   const { data: orders } = useQuery({
     queryKey: ['work-orders'],
@@ -133,13 +270,6 @@ export function RepairsPage() {
     queryFn: () => api.listPriceList(),
   });
 
-  const { data: store } = useQuery({
-    queryKey: ['store', storeId],
-    queryFn: () => api.getStore(storeId!),
-    enabled: !!storeId,
-  });
-
-  const [repairTerms, setRepairTerms] = useState('');
   const [phone, setPhone] = useState('');
   const [customerName, setCustomerName] = useState('');
   const [brandId, setBrandId] = useState('');
@@ -151,7 +281,7 @@ export function RepairsPage() {
   const [repairLocation, setRepairLocation] = useState('');
   const [expectedDate, setExpectedDate] = useState('');
   const [salePrice, setSalePrice] = useState('');
-  const [orderFilter, setOrderFilter] = useState<OrderFilter>('all');
+  const [orderFilter, setOrderFilter] = useState<OrderFilter>('in_progress');
   const [completeTarget, setCompleteTarget] = useState<WorkOrderRow | null>(null);
 
   const brandName = useMemo(
@@ -197,15 +327,6 @@ export function RepairsPage() {
       setPriceListItemId('');
     }
   }, [issueOptions, priceListItemId]);
-
-  useEffect(() => {
-    if (store?.repairTerms !== undefined) setRepairTerms(store.repairTerms ?? '');
-  }, [store?.repairTerms]);
-
-  const saveRepairTerms = useMutation({
-    mutationFn: () => api.updateStoreRepairTerms(storeId!, repairTerms),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['store', storeId] }),
-  });
 
   const create = useMutation({
     mutationFn: () => {
@@ -270,10 +391,13 @@ export function RepairsPage() {
     [orders, orderFilter],
   );
 
-  function nextStatus(flow: string, status: string): string | null {
-    const map = flow === 'send_out' ? SEND_OUT_STEPS : IN_STORE_STEPS;
-    return map[status] ?? null;
-  }
+  const activeOrders = useMemo(
+    () =>
+      ((orders as WorkOrderRow[] | undefined) ?? []).filter((wo) =>
+        IN_PROGRESS_STATUSES.has(wo.status),
+      ),
+    [orders],
+  );
 
   function onIssueSelect(id: string) {
     setPriceListItemId(id);
@@ -307,8 +431,9 @@ export function RepairsPage() {
         {t('repairs.intakeSubtitle')}
       </p>
 
+      <div className="repairs-top-layout">
       <form
-        className="section-card"
+        className="section-card repair-intake-form"
         onSubmit={(e: FormEvent) => {
           e.preventDefault();
           if (!phone.trim()) return;
@@ -317,8 +442,8 @@ export function RepairsPage() {
       >
         <h3>{t('repairs.intakeTitle')}</h3>
 
-        <div className="form-row">
-          <div className="form-field">
+        <div className="repair-intake-grid">
+          <div className="form-field repair-intake-span-6">
             <label>{t('repairs.customerPhone')} *</label>
             <input
               type="tel"
@@ -328,7 +453,7 @@ export function RepairsPage() {
               autoComplete="tel"
             />
           </div>
-          <div className="form-field">
+          <div className="form-field repair-intake-span-6">
             <label>{t('repairs.customerName')}</label>
             <input
               value={customerName}
@@ -336,10 +461,8 @@ export function RepairsPage() {
               autoComplete="name"
             />
           </div>
-        </div>
 
-        <div className="form-row">
-          <div className="form-field">
+          <div className="form-field repair-intake-span-6">
             <label>{t('repairs.brand')}</label>
             <select
               value={brandId}
@@ -356,7 +479,7 @@ export function RepairsPage() {
               ))}
             </select>
           </div>
-          <div className="form-field">
+          <div className="form-field repair-intake-span-6">
             <label>{t('repairs.deviceModel')}</label>
             <input
               list="repair-model-suggestions"
@@ -373,21 +496,37 @@ export function RepairsPage() {
               ))}
             </datalist>
           </div>
-        </div>
 
-        <div className="form-row">
-          <div className="form-field">
+          <div className="form-field repair-intake-imei">
             <label>{t('repairs.imeiSn')}</label>
             <input
               value={imeiSn}
               onChange={(e) => setImeiSn(e.target.value)}
               placeholder={t('repairs.imeiSnHint')}
+              maxLength={15}
+              inputMode="text"
+              autoComplete="off"
+              spellCheck={false}
             />
           </div>
-        </div>
+          <div className="form-field repair-intake-span-5">
+            <label>{t('repairs.repairLocation')}</label>
+            <input
+              value={repairLocation}
+              onChange={(e) => setRepairLocation(e.target.value)}
+              placeholder={t('repairs.repairLocationHint')}
+            />
+          </div>
+          <div className="form-field repair-intake-date">
+            <label>{t('repairs.expectedCompletion')}</label>
+            <input
+              type="date"
+              value={expectedDate}
+              onChange={(e) => setExpectedDate(e.target.value)}
+            />
+          </div>
 
-        <div className="form-row form-row-align-start">
-          <div className="form-field">
+          <div className="form-field repair-intake-span-8">
             <label>{t('repairs.issueFromList')}</label>
             <select
               value={priceListItemId}
@@ -409,44 +548,7 @@ export function RepairsPage() {
               ) : null}
             </div>
           </div>
-          <div className="form-field">
-            <label>{t('repairs.issueDescription')}</label>
-            <input
-              value={issueText}
-              onChange={(e) => {
-                setIssueText(e.target.value);
-                if (priceListItemId) {
-                  const opt = issueOptions.find((o) => o.id === priceListItemId);
-                  if (opt && e.target.value !== opt.issue) setPriceListItemId('');
-                }
-              }}
-              placeholder={t('priceList.issuePlaceholder')}
-            />
-            <div className="form-hint-slot" aria-hidden="true" />
-          </div>
-        </div>
-
-        <div className="form-row">
-          <div className="form-field">
-            <label>{t('repairs.repairLocation')}</label>
-            <input
-              value={repairLocation}
-              onChange={(e) => setRepairLocation(e.target.value)}
-              placeholder={t('repairs.repairLocationHint')}
-            />
-          </div>
-          <div className="form-field">
-            <label>{t('repairs.expectedCompletion')}</label>
-            <input
-              type="date"
-              value={expectedDate}
-              onChange={(e) => setExpectedDate(e.target.value)}
-            />
-          </div>
-        </div>
-
-        <div className="form-row">
-          <div className="form-field">
+          <div className="form-field repair-intake-price">
             <label>{t('repairs.salePrice')}</label>
             <input
               type="number"
@@ -457,13 +559,30 @@ export function RepairsPage() {
               placeholder="0.00"
             />
           </div>
-          <div className="form-field" style={{ flex: 2 }}>
+
+          <div className="form-field repair-intake-span-12">
+            <label>{t('repairs.issueDescription')}</label>
+            <textarea
+              rows={3}
+              value={issueText}
+              onChange={(e) => {
+                setIssueText(e.target.value);
+                if (priceListItemId) {
+                  const opt = issueOptions.find((o) => o.id === priceListItemId);
+                  if (opt && e.target.value !== opt.issue) setPriceListItemId('');
+                }
+              }}
+              placeholder={t('priceList.issuePlaceholder')}
+            />
+          </div>
+
+          <div className="form-field repair-intake-span-12">
             <label>{t('repairs.notes')}</label>
-            <input value={notes} onChange={(e) => setNotes(e.target.value)} />
+            <textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
           </div>
         </div>
 
-        <div className="form-row" style={{ marginTop: 8 }}>
+        <div className="repair-intake-actions">
           <button type="submit" className="btn btn-primary" disabled={create.isPending}>
             {t('repairs.submitIntake')}
           </button>
@@ -478,9 +597,38 @@ export function RepairsPage() {
         )}
       </form>
 
-      <section className="section-card" style={{ marginTop: '1.5rem' }}>
-        <h3>{t('repairs.openOrders')}</h3>
-        <div className="form-inline" style={{ marginBottom: '0.75rem', flexWrap: 'wrap', gap: 6 }}>
+      <aside className="section-card repairs-active-panel">
+        <h3>{t('repairs.activeOrders')}</h3>
+        <p className="repairs-active-panel__hint">
+          {activeOrders.length > 0
+            ? `${activeOrders.length} · ${t('repairs.filterInProgress')}`
+            : t('repairs.activeOrdersEmpty')}
+        </p>
+        <div className="repairs-active-panel__body">
+          {activeOrders.length === 0 ? (
+            <p className="empty-state">{t('repairs.activeOrdersEmpty')}</p>
+          ) : (
+            <ul className="repairs-active-list">
+              {activeOrders.map((wo) => (
+                <WorkOrderCard
+                  key={wo._id}
+                  wo={wo}
+                  compact
+                  t={t}
+                  onComplete={setCompleteTarget}
+                  onTransition={(args) => transition.mutate(args)}
+                  transitionPending={transition.isPending}
+                />
+              ))}
+            </ul>
+          )}
+        </div>
+      </aside>
+      </div>
+
+      <details className="section-card collapsible-section repairs-orders-section">
+        <summary>{t('repairs.openOrders')}</summary>
+        <div className="form-inline" style={{ marginTop: '0.75rem', marginBottom: '0.75rem', flexWrap: 'wrap', gap: 6 }}>
           {(['all', 'in_progress', 'awaiting_payment', 'completed'] as OrderFilter[]).map(
             (f) => (
               <button
@@ -502,113 +650,21 @@ export function RepairsPage() {
           )}
         </div>
         <ul className="clean-list">
-          {filteredOrders.map((wo) => {
-            const next = nextStatus(wo.flowType, wo.status);
-            const deviceLabel = [wo.deviceBrand, wo.deviceModel].filter(Boolean).join(' ');
-            const sn = wo.imeiSn || wo.serialSn;
-            return (
-              <li key={wo._id} className="card" style={{ marginBottom: 8 }}>
-                <div>
-                  <strong>{wo.docNumber}</strong>
-                  <span className="badge" style={{ marginLeft: 8 }}>
-                    {t(`repairs.status.${wo.status}`, { defaultValue: wo.status })}
-                  </span>
-                  {wo.completionResult && (
-                    <span className="badge" style={{ marginLeft: 4 }}>
-                      {wo.completionResult === 'successful'
-                        ? t('repairs.outcomeSuccessful')
-                        : t('repairs.outcomeFailed')}
-                    </span>
-                  )}
-                  {wo.flowType === 'send_out' && (
-                    <span className="badge" style={{ marginLeft: 4 }}>
-                      {t('repairs.sendOut')}
-                    </span>
-                  )}
-                </div>
-                <div style={{ fontSize: '0.875rem', marginTop: 4 }}>
-                  {wo.customerName || '—'} · {wo.customerPhone || '—'}
-                  {deviceLabel && ` · ${deviceLabel}`}
-                  {sn && ` · ${t('repairs.imeiSn')}: ${sn}`}
-                </div>
-                {wo.issueDescription && (
-                  <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
-                    {wo.issueDescription}
-                  </div>
-                )}
-                {wo.repairLocation && (
-                  <div style={{ fontSize: '0.8125rem' }}>
-                    {t('repairs.repairLocation')}: {wo.repairLocation}
-                  </div>
-                )}
-                {wo.expectedCompletionAt && (
-                  <div style={{ fontSize: '0.8125rem' }}>
-                    {t('repairs.expectedCompletion')}:{' '}
-                    {new Date(wo.expectedCompletionAt).toLocaleDateString()}
-                  </div>
-                )}
-                {wo.status === 'awaiting_payment' && (
-                  <p className="form-hint" style={{ marginTop: 4 }}>
-                    {t('repairs.payAtPos')}
-                  </p>
-                )}
-                <div style={{ marginTop: 6 }}>
-                  €{wo.quotedPriceIncVat.toFixed(2)}
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    style={{ marginLeft: 8, fontSize: '0.75rem' }}
-                    onClick={() => printCustomerReceipt(wo._id)}
-                  >
-                    {t('repairs.printCustomerReceipt')}
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    style={{ marginLeft: 8, fontSize: '0.75rem' }}
-                    onClick={() => printRepairSlip(wo._id)}
-                  >
-                    {t('repairs.printRepairSlip')}
-                  </button>
-                  {needsCompleteAction(wo) && (
-                    <button
-                      type="button"
-                      className="btn btn-secondary"
-                      style={{ marginLeft: 8, fontSize: '0.75rem' }}
-                      onClick={() => setCompleteTarget(wo)}
-                    >
-                      {t('repairs.completeRepair')}
-                    </button>
-                  )}
-                  {next && (
-                    <button
-                      type="button"
-                      className="btn btn-secondary"
-                      style={{ marginLeft: 8, fontSize: '0.75rem' }}
-                      onClick={() => transition.mutate({ id: wo._id, status: next })}
-                    >
-                      → {t(`repairs.status.${next}`, { defaultValue: next })}
-                    </button>
-                  )}
-                  {wo.status !== 'cancelled' && wo.status !== 'completed' && (
-                    <button
-                      type="button"
-                      className="btn btn-secondary"
-                      style={{ marginLeft: 8, fontSize: '0.75rem', color: 'var(--danger, #b91c1c)' }}
-                      onClick={() => transition.mutate({ id: wo._id, status: 'cancelled' })}
-                    >
-                      {t('repairs.cancel')}
-                    </button>
-                  )}
-                </div>
-              </li>
-            );
-          })}
+          {filteredOrders.map((wo) => (
+            <WorkOrderCard
+              key={wo._id}
+              wo={wo}
+              t={t}
+              onComplete={setCompleteTarget}
+              onTransition={(args) => transition.mutate(args)}
+              transitionPending={transition.isPending}
+            />
+          ))}
         </ul>
         {filteredOrders.length === 0 && (
           <p className="empty-state">{t('repairs.noOrders')}</p>
         )}
-      </section>
+      </details>
 
       {completeTarget && (
         <div
@@ -659,31 +715,6 @@ export function RepairsPage() {
         </div>
       )}
 
-      {storeId && (
-        <details className="section-card collapsible-section">
-          <summary>{t('repairs.repairTermsTitle')}</summary>
-          <p style={{ marginTop: '0.5rem', fontSize: '0.875rem', color: 'var(--text-muted)' }}>
-            {t('repairs.repairTermsHint')}
-          </p>
-          <div className="form-field">
-            <textarea
-              rows={4}
-              value={repairTerms}
-              onChange={(e) => setRepairTerms(e.target.value)}
-              maxLength={4000}
-              placeholder={t('repairs.repairTermsPlaceholder')}
-            />
-          </div>
-          <button
-            type="button"
-            className="btn btn-secondary"
-            disabled={saveRepairTerms.isPending}
-            onClick={() => saveRepairTerms.mutate()}
-          >
-            {t('repairs.saveRepairTerms')}
-          </button>
-        </details>
-      )}
     </div>
   );
 }

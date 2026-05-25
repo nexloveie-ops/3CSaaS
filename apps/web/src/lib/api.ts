@@ -300,6 +300,7 @@ export const api = {
       phone?: string;
       email?: string;
       repairTerms?: string;
+      salesTerms?: string;
     }>(`/stores/${id}`),
 
   updateStoreProfile: (
@@ -315,6 +316,12 @@ export const api = {
     request(`/stores/${id}/repair-terms`, {
       method: 'PATCH',
       body: JSON.stringify({ repairTerms }),
+    }),
+
+  updateStoreSalesTerms: (id: string, salesTerms: string) =>
+    request(`/stores/${id}/sales-terms`, {
+      method: 'PATCH',
+      body: JSON.stringify({ salesTerms }),
     }),
 
   listTaxCategories: () => request('/tax-categories'),
@@ -404,6 +411,14 @@ export const api = {
     }),
 
   listInventory: () => request('/inventory/positions'),
+
+  listInboundReceipts: (opts?: { from?: string; to?: string }) => {
+    const q = new URLSearchParams();
+    if (opts?.from) q.set('from', opts.from);
+    if (opts?.to) q.set('to', opts.to);
+    const qs = q.toString();
+    return request(`/inventory/inbound${qs ? `?${qs}` : ''}`);
+  },
 
   createInbound: (body: Record<string, unknown>) =>
     request('/inventory/inbound', { method: 'POST', body: JSON.stringify(body) }),
@@ -611,33 +626,12 @@ export const api = {
   listPreorders: () => request('/preorders'),
   createPreorder: (body: Record<string, unknown>) =>
     request('/preorders', { method: 'POST', body: JSON.stringify(body) }),
-  payPreorderDeposit: (id: string, body: Record<string, unknown>) =>
-    request(`/preorders/${id}/deposit`, { method: 'POST', body: JSON.stringify(body) }),
-  markPreorderReady: (id: string) =>
-    request(`/preorders/${id}/ready`, { method: 'POST', body: '{}' }),
-  convertPreorder: (id: string, body: Record<string, unknown>) =>
-    request(`/preorders/${id}/convert`, { method: 'POST', body: JSON.stringify(body) }),
+  markPreorderArrived: (id: string, body: { notifyVia: 'email' | 'sms' | 'both' }) =>
+    request(`/preorders/${id}/arrived`, { method: 'POST', body: JSON.stringify(body) }),
+  markPreorderCompleted: (id: string) =>
+    request(`/preorders/${id}/complete`, { method: 'POST', body: '{}' }),
   cancelPreorder: (id: string) =>
     request(`/preorders/${id}/cancel`, { method: 'POST', body: '{}' }),
-
-  listCreditNotes: () =>
-    request<
-      {
-        _id: string;
-        docNumber: string;
-        totalIncVat: number;
-        businessDate?: string;
-        sourcePreorderId?: string;
-      }[]
-    >('/credit-notes'),
-
-  fetchCreditNotePrintHtml: async (id: string) => {
-    const res = await fetch(`${BASE}/credit-notes/${id}/print`, {
-      headers: headers() as Record<string, string>,
-    });
-    if (!res.ok) throw new Error('Credit note print failed');
-    return res.text();
-  },
 
   listB2bOrders: (role: 'seller' | 'buyer') =>
     request(`/b2b/orders?role=${role}`),
@@ -692,6 +686,11 @@ export const api = {
 
   getCompanyReport: (date?: string) =>
     request(`/reports/company${date ? `?date=${date}` : ''}`),
+
+  getSalesReport: (from: string, to: string) =>
+    request(
+      `/reports/sales?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+    ),
 
   downloadDailyReportCsv: async (date?: string) => {
     const d = date ?? new Date().toISOString().slice(0, 10);

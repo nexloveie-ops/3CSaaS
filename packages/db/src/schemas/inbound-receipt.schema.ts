@@ -39,6 +39,12 @@ export class InboundReceipt {
 
   @Prop()
   notes?: string;
+
+  @Prop({ trim: true })
+  supplier?: string;
+
+  @Prop({ type: Date })
+  receivedAt?: Date;
 }
 
 export const InboundReceiptSchema = SchemaFactory.createForClass(InboundReceipt);
