@@ -110,26 +110,24 @@ export function VariantInboundModal({
     });
   }, [variants, onHandById]);
 
-  const linesToSubmit = useMemo(() => {
-    return variants
-      .map((v) => {
-        const edit = rowEdits[v._id];
-        if (!edit) return null;
-        const quantity = parseQty(edit.addQty);
-        if (quantity <= 0) return null;
-        const unitCost = parseMoney(edit.cost);
-        const retailPrice = parseMoney(edit.retail);
-        const stockOnHand = parseQty(edit.onHand);
-        const baseline = onHandById.get(v._id) ?? 0;
-        return {
-          productId: v._id,
-          quantity,
-          unitCost,
-          retailPrice,
-          stockOnHand: stockOnHand !== baseline ? stockOnHand : undefined,
-        };
-      })
-      .filter((l): l is VariantInboundLine => l != null);
+  const linesToSubmit = useMemo((): VariantInboundLine[] => {
+    const lines: VariantInboundLine[] = [];
+    for (const v of variants) {
+      const edit = rowEdits[v._id];
+      if (!edit) continue;
+      const quantity = parseQty(edit.addQty);
+      if (quantity <= 0) continue;
+      const unitCost = parseMoney(edit.cost);
+      const retailPrice = parseMoney(edit.retail);
+      const stockOnHand = parseQty(edit.onHand);
+      const baseline = onHandById.get(v._id) ?? 0;
+      const line: VariantInboundLine = { productId: v._id, quantity };
+      if (unitCost !== undefined) line.unitCost = unitCost;
+      if (retailPrice !== undefined) line.retailPrice = retailPrice;
+      if (stockOnHand !== baseline) line.stockOnHand = stockOnHand;
+      lines.push(line);
+    }
+    return lines;
   }, [variants, rowEdits, onHandById]);
 
   function updateRow(id: string, patch: Partial<RowEdit>) {
@@ -227,10 +225,8 @@ export function VariantInboundModal({
                   </thead>
                   <tbody>
                     {variants.map((v) => {
-                      const label =
-                        v.variantValues?.length > 0
-                          ? v.variantValues.join(' · ')
-                          : v.name;
+                      const variantLabel = v.variantValues?.filter(Boolean).join(' · ');
+                      const label = variantLabel || v.name;
                       const edit = rowEdits[v._id] ?? {
                         addQty: '',
                         cost: '',
