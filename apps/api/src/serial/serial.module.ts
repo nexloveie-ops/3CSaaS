@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import {
+  InventoryPosition,
+  InventoryPositionSchema,
   Product,
   ProductSchema,
   SerialEvent,
@@ -19,6 +21,7 @@ import { SerialService } from './serial.service';
       { name: SerialUnit.name, schema: SerialUnitSchema },
       { name: SerialEvent.name, schema: SerialEventSchema },
       { name: Product.name, schema: ProductSchema },
+      { name: InventoryPosition.name, schema: InventoryPositionSchema },
     ]),
   ],
   controllers: [SerialController],

@@ -8,6 +8,7 @@ export * from './schemas/product.schema';
 export * from './schemas/serial-unit.schema';
 export * from './schemas/serial-event.schema';
 export * from './schemas/inventory-position.schema';
+export * from './schemas/store-product-setting.schema';
 export * from './schemas/inbound-receipt.schema';
 export * from './schemas/customer.schema';
 export * from './schemas/document-sequence.schema';

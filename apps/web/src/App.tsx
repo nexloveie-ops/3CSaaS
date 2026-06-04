@@ -19,11 +19,12 @@ import { ReportsPage } from './pages/ReportsPage';
 import { BillingPage } from './pages/BillingPage';
 import { AdminPage } from './pages/AdminPage';
 import { WarehousePage } from './pages/WarehousePage';
+import { StoreCatalogPage } from './pages/StoreCatalogPage';
 import { ChainPage } from './pages/ChainPage';
 import { AcceptInvitePage } from './pages/AcceptInvitePage';
 import { AuditPage } from './pages/AuditPage';
 import { useAuthStore } from './stores/auth';
-import { normalizeMemberships, readPersistedCashierOnly } from './lib/auth-session';
+import { normalizeMemberships, readPersistedAuth, readPersistedCashierOnly } from './lib/auth-session';
 import { meQueryKey } from './lib/query-keys';
 import { resolveLoginLandingPath } from '@lz3c/shared';
 
@@ -86,7 +87,7 @@ function HomePage() {
 }
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const token = useAuthStore((s) => s.token);
+  const token = useAuthStore((s) => s.token) ?? readPersistedAuth().token;
   if (!token) return <Navigate to="/login" replace />;
   return <>{children}</>;
 }
@@ -110,6 +111,7 @@ export default function App() {
         <Route index element={<DashboardIndex />} />
         <Route path="products" element={<ProductsPage />} />
         <Route path="inventory" element={<InventoryPage />} />
+        <Route path="store-catalog" element={<StoreCatalogPage />} />
         <Route path="pos" element={<PosPage />} />
         <Route path="customers" element={<CustomersPage />} />
         <Route path="repairs" element={<RepairsPage />} />

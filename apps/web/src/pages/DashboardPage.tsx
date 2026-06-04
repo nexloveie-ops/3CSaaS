@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from 'react-router-dom';
 import { isValidLocale } from '@lz3c/shared';
 import { PageHeader } from '../components/ui/PageHeader';
+import { EditStoreMemberModal } from '../components/dashboard/EditStoreMemberModal';
 import { meQueryKey } from '../lib/query-keys';
 import { api } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
@@ -19,7 +20,6 @@ export function DashboardPage() {
   const [companyName, setCompanyName] = useState('');
   const [storeName, setStoreName] = useState('');
   const [warehouseStore, setWarehouseStore] = useState(false);
-  const [companyDefaultLocale, setCompanyDefaultLocale] = useState('en');
   const [memberEmail, setMemberEmail] = useState('');
   const [memberRole, setMemberRole] = useState('cashier');
   const [memberStoreId, setMemberStoreId] = useState('');
@@ -44,6 +44,16 @@ export function DashboardPage() {
   const [storeAddress, setStoreAddress] = useState('');
   const [storePhone, setStorePhone] = useState('');
   const [storeEmail, setStoreEmail] = useState('');
+  const [storeEditName, setStoreEditName] = useState('');
+  const [storeEditWarehouse, setStoreEditWarehouse] = useState(false);
+  const [editingStoreMember, setEditingStoreMember] = useState<{
+    _id: string;
+    email: string;
+    displayName?: string;
+    role: string;
+    storeId: string | null;
+  } | null>(null);
+  const [expandedCompanyId, setExpandedCompanyId] = useState<string | null>(companyId);
   const qc = useQueryClient();
 
   const { data: me } = useQuery({
@@ -70,36 +80,55 @@ export function DashboardPage() {
   });
 
   useEffect(() => {
-    if (company?.defaultLocale) setCompanyDefaultLocale(company.defaultLocale);
-  }, [company?.defaultLocale]);
+    type CompanyFormSource = {
+      _id?: string;
+      webhookUrl?: string;
+      auditRetentionDays?: number;
+      inviteEmailNote?: string;
+      inviteEmailNoteZh?: string;
+      legalName?: string;
+      registrationNumber?: string;
+      vatNumber?: string;
+      address?: string;
+      contactPhone?: string;
+      contactEmail?: string;
+    };
 
-  useEffect(() => {
-    const c = company as
-      | {
-          webhookUrl?: string;
-          auditRetentionDays?: number;
-          inviteEmailNote?: string;
-          inviteEmailNoteZh?: string;
-          legalName?: string;
-          registrationNumber?: string;
-          vatNumber?: string;
-          address?: string;
-          contactPhone?: string;
-          contactEmail?: string;
-        }
-      | undefined;
-    if (!c) return;
-    if (c.webhookUrl !== undefined) setWebhookUrl(c.webhookUrl ?? '');
-    if (c.auditRetentionDays != null) setAuditRetentionDays(c.auditRetentionDays);
-    if (c.inviteEmailNote !== undefined) setInviteEmailNote(c.inviteEmailNote ?? '');
-    if (c.inviteEmailNoteZh !== undefined) setInviteEmailNoteZh(c.inviteEmailNoteZh ?? '');
-    if (c.legalName !== undefined) setLegalName(c.legalName ?? '');
-    if (c.registrationNumber !== undefined) setRegistrationNumber(c.registrationNumber ?? '');
-    if (c.vatNumber !== undefined) setCompanyVat(c.vatNumber ?? '');
-    if (c.address !== undefined) setCompanyAddress(c.address ?? '');
-    if (c.contactPhone !== undefined) setCompanyPhone(c.contactPhone ?? '');
-    if (c.contactEmail !== undefined) setCompanyEmail(c.contactEmail ?? '');
-  }, [company]);
+    const resetCompanyForm = () => {
+      setWebhookUrl('');
+      setAuditRetentionDays(365);
+      setInviteEmailNote('');
+      setInviteEmailNoteZh('');
+      setLegalName('');
+      setRegistrationNumber('');
+      setCompanyVat('');
+      setCompanyAddress('');
+      setCompanyPhone('');
+      setCompanyEmail('');
+    };
+
+    if (!companyId) {
+      resetCompanyForm();
+      return;
+    }
+
+    const c = company as CompanyFormSource | undefined;
+    if (!c || c._id !== companyId) {
+      resetCompanyForm();
+      return;
+    }
+
+    setWebhookUrl(c.webhookUrl ?? '');
+    setAuditRetentionDays(c.auditRetentionDays ?? 365);
+    setInviteEmailNote(c.inviteEmailNote ?? '');
+    setInviteEmailNoteZh(c.inviteEmailNoteZh ?? '');
+    setLegalName(c.legalName ?? '');
+    setRegistrationNumber(c.registrationNumber ?? '');
+    setCompanyVat(c.vatNumber ?? '');
+    setCompanyAddress(c.address ?? '');
+    setCompanyPhone(c.contactPhone ?? '');
+    setCompanyEmail(c.contactEmail ?? '');
+  }, [companyId, company]);
 
   const { data: selectedStore } = useQuery({
     queryKey: ['store', storeId],
@@ -108,19 +137,52 @@ export function DashboardPage() {
   });
 
   useEffect(() => {
+    const resetStoreForm = () => {
+      setStoreEditName('');
+      setStoreEditWarehouse(false);
+      setStoreAddress('');
+      setStorePhone('');
+      setStoreEmail('');
+    };
+
+    if (!storeId) {
+      resetStoreForm();
+      return;
+    }
+
     const s = selectedStore as
-      | { address?: string; phone?: string; email?: string }
+      | {
+          _id?: string;
+          name?: string;
+          warehouseEnabled?: boolean;
+          address?: string;
+          phone?: string;
+          email?: string;
+        }
       | undefined;
-    if (!s) return;
-    if (s.address !== undefined) setStoreAddress(s.address ?? '');
-    if (s.phone !== undefined) setStorePhone(s.phone ?? '');
-    if (s.email !== undefined) setStoreEmail(s.email ?? '');
-  }, [selectedStore]);
+    if (!s || s._id !== storeId) {
+      resetStoreForm();
+      return;
+    }
+
+    setStoreEditName(s.name ?? '');
+    setStoreEditWarehouse(!!s.warehouseEnabled);
+    setStoreAddress(s.address ?? '');
+    setStorePhone(s.phone ?? '');
+    setStoreEmail(s.email ?? '');
+  }, [storeId, selectedStore]);
 
   const { data: stores } = useQuery({
     queryKey: ['stores', companyId],
     queryFn: () => api.listStores(),
     enabled: !!token && !!companyId,
+  });
+
+  const { data: companyMembers } = useQuery({
+    queryKey: ['companyMembers', companyId],
+    queryFn: () => api.listCompanyMembers(companyId!),
+    enabled: !!token && !!companyId,
+    retry: false,
   });
 
   const { data: billing } = useQuery({
@@ -133,6 +195,7 @@ export function DashboardPage() {
     mutationFn: (name: string) => api.createCompany(name),
     onSuccess: (c: { _id: string }) => {
       setCompanyId(c._id);
+      setExpandedCompanyId(c._id);
       qc.invalidateQueries({ queryKey: ['companies'] });
       setCompanyName('');
     },
@@ -145,12 +208,6 @@ export function DashboardPage() {
       qc.invalidateQueries({ queryKey: ['stores', companyId] });
       setStoreName('');
     },
-  });
-
-  const saveCompanyLocale = useMutation({
-    mutationFn: () =>
-      api.updateCompanyLocale(companyId!, { defaultLocale: companyDefaultLocale }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['company', companyId] }),
   });
 
   const { data: pendingInvites, refetch: refetchInvites } = useQuery({
@@ -230,11 +287,16 @@ export function DashboardPage() {
   const saveStoreProfile = useMutation({
     mutationFn: () =>
       api.updateStoreProfile(storeId!, {
+        name: storeEditName.trim() || undefined,
         address: storeAddress || undefined,
         phone: storePhone || undefined,
         email: storeEmail || undefined,
+        warehouseEnabled: storeEditWarehouse,
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['store', storeId] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['store', storeId] });
+      qc.invalidateQueries({ queryKey: ['stores', companyId] });
+    },
   });
 
   const purgeAudit = useMutation({
@@ -266,6 +328,26 @@ export function DashboardPage() {
     onSuccess: () => {
       setMemberEmail('');
       qc.invalidateQueries({ queryKey: meQueryKey(token) });
+      qc.invalidateQueries({ queryKey: ['companyMembers', companyId] });
+    },
+  });
+
+  const updateStoreMember = useMutation({
+    mutationFn: (body: { displayName: string; role: string; storeId: string }) =>
+      api.updateCompanyMember(companyId!, editingStoreMember!._id, body),
+    onSuccess: () => {
+      setEditingStoreMember(null);
+      qc.invalidateQueries({ queryKey: ['companyMembers', companyId] });
+      qc.invalidateQueries({ queryKey: meQueryKey(token) });
+    },
+  });
+
+  const removeStoreMember = useMutation({
+    mutationFn: () => api.removeCompanyMember(companyId!, editingStoreMember!._id),
+    onSuccess: () => {
+      setEditingStoreMember(null);
+      qc.invalidateQueries({ queryKey: ['companyMembers', companyId] });
+      qc.invalidateQueries({ queryKey: meQueryKey(token) });
     },
   });
 
@@ -283,45 +365,62 @@ export function DashboardPage() {
       }
     | undefined;
 
+  const companyList = (companies as { _id: string; name: string }[] | undefined) ?? [];
+  const expandedCompany = companyList.find((c) => c._id === expandedCompanyId);
+  const storeList =
+    (stores as { _id: string; name: string; warehouseEnabled?: boolean }[] | undefined) ?? [];
+  const selectedStoreSummary = storeList.find((s) => s._id === storeId);
+  const storeStaff =
+    (
+      companyMembers as
+        | {
+            _id: string;
+            email: string;
+            displayName?: string;
+            role: string;
+            storeId: string | null;
+          }[]
+        | undefined
+    )?.filter((m) => m.storeId === storeId) ?? [];
+
+  function selectCompany(id: string) {
+    setCompanyId(id);
+    setStoreId(null);
+    setExpandedCompanyId(id);
+    setMemberStoreId('');
+    setInviteStoreId('');
+    setLastInviteUrl('');
+    setSelectedWebhookId('');
+  }
+
+  function toggleCompany(id: string) {
+    if (expandedCompanyId === id) {
+      setExpandedCompanyId(null);
+      return;
+    }
+    selectCompany(id);
+  }
+
   return (
-    <div className="page-content">
+    <div className="page-content page-content--dashboard">
       <PageHeader
+        className="dashboard-page-header"
         title={t('dashboard.title')}
         description={t('dashboard.welcome', { name: displayName || '—' })}
       />
 
-      <div className="dashboard-grid">
-      <div className="section-card">
-        <h3>{t('dashboard.companies')}</h3>
-        <ul className="clean-list">
-          {(companies as { _id: string; name: string }[] | undefined)?.map((c) => (
-            <li key={c._id} className="form-inline">
-              <button
-                type="button"
-                className={companyId === c._id ? '' : 'btn-secondary btn-sm'}
-                onClick={() => {
-                  setCompanyId(c._id);
-                  setStoreId(null);
-                }}
-              >
-                {t('common.select')}
-              </button>
-              <span>
-                <strong>{c.name}</strong>{' '}
-                <span className="code">{c._id}</span>
-              </span>
-            </li>
-          ))}
-        </ul>
+      <section className="section-card dashboard-companies-section">
+        <div className="dashboard-section-head">
+          <h3>{t('dashboard.companies')}</h3>
+        </div>
         <form
-          className="form-row"
-          style={{ marginTop: '1rem' }}
+          className="form-row dashboard-companies-create"
           onSubmit={(e: FormEvent) => {
             e.preventDefault();
             createCompany.mutate(companyName);
           }}
         >
-          <div className="form-field" style={{ flex: 2 }}>
+          <div className="form-field" style={{ flex: 2, marginBottom: 0 }}>
             <input
               placeholder={t('dashboard.newCompany')}
               value={companyName}
@@ -330,17 +429,226 @@ export function DashboardPage() {
           </div>
           <button type="submit">{t('dashboard.createCompany')}</button>
         </form>
-        <p className="status-ok" style={{ marginTop: '0.75rem', marginBottom: 0 }}>
-          {t('dashboard.taxHint')}
-        </p>
-      </div>
+        <p className="dashboard-companies-hint">{t('dashboard.taxHint')}</p>
+        <div className="dashboard-companies-grid">
+          {companyList.map((c) => {
+            const isActive = companyId === c._id;
+            const isExpanded = expandedCompanyId === c._id;
+            return (
+              <button
+                key={c._id}
+                type="button"
+                className={`dashboard-company-card${isExpanded ? ' dashboard-company-card--expanded' : ''}${isActive ? ' dashboard-company-card--active' : ''}`}
+                onClick={() => toggleCompany(c._id)}
+              >
+                <span className="dashboard-company-card__name">{c.name}</span>
+                {isActive && (
+                  <span className="badge dashboard-company-card__badge">
+                    {t('dashboard.activeCompany')}
+                  </span>
+                )}
+                <span className="dashboard-company-card__hint">
+                  {isExpanded ? t('dashboard.collapseCompany') : t('dashboard.editCompany')}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
+      {expandedCompanyId && companyId && expandedCompany && (
+        <section className="section-card dashboard-company-panel">
+          <header className="dashboard-company-panel__head">
+            <div>
+              <h3>{expandedCompany.name}</h3>
+              <p className="dashboard-company-panel__sub">{t('dashboard.companyPanelHint')}</p>
+            </div>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => setExpandedCompanyId(null)}
+            >
+              {t('dashboard.collapseCompany')}
+            </button>
+          </header>
+
+          <div className="dashboard-grid">
+      {companyId && (
+        <details className="section-card collapsible-section dashboard-stores-section">
+          <summary>{t('dashboard.stores')}</summary>
+          <p className="dashboard-stores-hint">{t('dashboard.storesHint')}</p>
+          <form
+            className="form-row dashboard-stores-create"
+            onSubmit={(e: FormEvent) => {
+              e.preventDefault();
+              createStore.mutate(storeName);
+            }}
+          >
+            <div className="form-field dashboard-stores-create__name">
+              <input
+                placeholder={t('dashboard.newStore')}
+                value={storeName}
+                onChange={(e) => setStoreName(e.target.value)}
+              />
+            </div>
+            <label className="dashboard-warehouse-check">
+              <input
+                type="checkbox"
+                checked={warehouseStore}
+                onChange={(e) => setWarehouseStore(e.target.checked)}
+              />
+              <span>{t('dashboard.warehouseFlag')}</span>
+            </label>
+            <button type="submit" className="btn btn-primary dashboard-stores-create__submit">
+              {t('dashboard.createStore')}
+            </button>
+          </form>
+          {storeList.length ? (
+            <div className="dashboard-stores-grid">
+              {storeList.map((s) => {
+                const isSelected = storeId === s._id;
+                const staffCount =
+                  (
+                    companyMembers as { storeId: string | null }[] | undefined
+                  )?.filter((m) => m.storeId === s._id).length ?? 0;
+                return (
+                  <button
+                    key={s._id}
+                    type="button"
+                    className={`dashboard-store-card${isSelected ? ' dashboard-store-card--selected' : ''}`}
+                    onClick={() => setStoreId(s._id)}
+                  >
+                    <span className="dashboard-store-card__name">{s.name}</span>
+                    <span className="dashboard-store-card__meta">
+                      <span className="dashboard-store-card__badge-slot">
+                        {s.warehouseEnabled ? (
+                          <span className="badge dashboard-store-card__badge">
+                            {t('dashboard.warehouseFlag')}
+                          </span>
+                        ) : null}
+                      </span>
+                      <span className="dashboard-store-card__count">
+                        {t('dashboard.storeStaffCount', { count: staffCount })}
+                      </span>
+                    </span>
+                    <span className="dashboard-store-card__hint">
+                      {isSelected ? t('dashboard.activeStore') : t('dashboard.selectStore')}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="dashboard-stores-empty">{t('dashboard.storesEmpty')}</p>
+          )}
+
+          {storeId && selectedStoreSummary && (
+            <div className="dashboard-store-panel">
+              <div className="dashboard-store-profile">
+                <h4>{t('dashboard.storeProfile')}</h4>
+                <p className="dashboard-stores-hint dashboard-card-hint">{t('dashboard.storeProfileHint')}</p>
+                <div className="form-row">
+                  <div className="form-field">
+                    <label>{t('dashboard.storeName')}</label>
+                    <input
+                      value={storeEditName}
+                      onChange={(e) => setStoreEditName(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <label className="dashboard-warehouse-check dashboard-store-profile__warehouse">
+                    <input
+                      type="checkbox"
+                      checked={storeEditWarehouse}
+                      onChange={(e) => setStoreEditWarehouse(e.target.checked)}
+                    />
+                    <span>{t('dashboard.warehouseFlag')}</span>
+                  </label>
+                </div>
+                <div className="form-field">
+                  <label>{t('dashboard.storeAddress')}</label>
+                  <input value={storeAddress} onChange={(e) => setStoreAddress(e.target.value)} />
+                </div>
+                <div className="form-row">
+                  <div className="form-field">
+                    <label>{t('dashboard.storePhone')}</label>
+                    <input value={storePhone} onChange={(e) => setStorePhone(e.target.value)} />
+                  </div>
+                  <div className="form-field">
+                    <label>{t('dashboard.storeEmail')}</label>
+                    <input
+                      type="email"
+                      value={storeEmail}
+                      onChange={(e) => setStoreEmail(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  disabled={!storeEditName.trim() || saveStoreProfile.isPending}
+                  onClick={() => saveStoreProfile.mutate()}
+                >
+                  {t('dashboard.saveStoreProfile')}
+                </button>
+              </div>
+
+              <div className="dashboard-store-staff">
+                <h4>{t('dashboard.storeStaff', { store: storeEditName || selectedStoreSummary.name })}</h4>
+                {storeStaff.length ? (
+                  <>
+                    <p className="dashboard-card-hint">{t('dashboard.storeStaffEditHint')}</p>
+                    <div className="table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th align="left">{t('dashboard.memberName')}</th>
+                          <th align="left">{t('auth.email')}</th>
+                          <th align="left">{t('dashboard.memberRole')}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {storeStaff.map((m) => (
+                          <tr
+                            key={m._id}
+                            className="dashboard-store-staff-row"
+                            tabIndex={0}
+                            role="button"
+                            onClick={() => setEditingStoreMember(m)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                setEditingStoreMember(m);
+                              }
+                            }}
+                          >
+                            <td>{m.displayName || '—'}</td>
+                            <td>{m.email}</td>
+                            <td>
+                              <code>{m.role}</code>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  </>
+                ) : (
+                  <p className="dashboard-stores-empty">{t('dashboard.storeStaffEmpty')}</p>
+                )}
+              </div>
+            </div>
+          )}
+
+        </details>
+      )}
 
       {companyId && (
-        <div className="section-card">
+        <div
+          className={`dashboard-company-row${billingInfo?.subscriptionStatus === 'read_only' ? ' dashboard-company-row--two-cols' : ''}`}
+        >
+          <div className="section-card dashboard-company-profile">
           <h3>{t('dashboard.companyProfile')}</h3>
-          <p style={{ marginTop: 0, fontSize: '0.875rem', color: 'var(--text-muted)' }}>
-            {t('dashboard.companyProfileHint')}
-          </p>
+          <p className="dashboard-card-hint">{t('dashboard.companyProfileHint')}</p>
           <div className="form-row">
             <div className="form-field">
               <label>{t('dashboard.legalName')}</label>
@@ -364,17 +672,19 @@ export function DashboardPage() {
               <input value={companyPhone} onChange={(e) => setCompanyPhone(e.target.value)} />
             </div>
           </div>
-          <div className="form-field">
-            <label>{t('dashboard.companyEmail')}</label>
-            <input
-              type="email"
-              value={companyEmail}
-              onChange={(e) => setCompanyEmail(e.target.value)}
-            />
-          </div>
-          <div className="form-field">
-            <label>{t('dashboard.companyAddress')}</label>
-            <input value={companyAddress} onChange={(e) => setCompanyAddress(e.target.value)} />
+          <div className="form-row">
+            <div className="form-field">
+              <label>{t('dashboard.companyEmail')}</label>
+              <input
+                type="email"
+                value={companyEmail}
+                onChange={(e) => setCompanyEmail(e.target.value)}
+              />
+            </div>
+            <div className="form-field">
+              <label>{t('dashboard.companyAddress')}</label>
+              <input value={companyAddress} onChange={(e) => setCompanyAddress(e.target.value)} />
+            </div>
           </div>
           <button
             type="button"
@@ -383,34 +693,91 @@ export function DashboardPage() {
           >
             {t('dashboard.saveCompanyProfile')}
           </button>
-        </div>
-      )}
+          </div>
 
-      {companyId && billingInfo && (
-        <div className="section-card">
-          <h3>{t('dashboard.subscription')}</h3>
-          <p>
-            {t('dashboard.subscriptionStatus')}:{' '}
-            <strong>{billingInfo.subscriptionStatus}</strong>
-            {billingInfo.subscriptionStatus === 'read_only' && (
-              <span className="status-fail" style={{ marginLeft: 8 }}>
-                {t('dashboard.readOnlyBanner')}
-              </span>
-            )}
-          </p>
-          <p>
-            {t('dashboard.subscriptionPlan')}: {billingInfo.plan?.name ?? '—'}
-          </p>
-          <p style={{ fontSize: 13 }}>
-            {t('dashboard.subscriptionModules')}: {billingInfo.enabledModules?.join(', ')}
-          </p>
-          <Link to="/dashboard/billing">{t('dashboard.manageBilling')}</Link>
+          {billingInfo && (
+            <div className="section-card dashboard-subscription-section">
+              <h3>{t('dashboard.subscription')}</h3>
+              <div className="dashboard-subscription-compact dashboard-subscription-compact--stacked">
+                <span className="dashboard-subscription-compact__item">
+                  <span className="dashboard-subscription-compact__label">
+                    {t('dashboard.subscriptionStatus')}
+                  </span>
+                  <strong>{billingInfo.subscriptionStatus}</strong>
+                  {billingInfo.subscriptionStatus === 'read_only' && (
+                    <span className="status-fail">{t('dashboard.readOnlyBanner')}</span>
+                  )}
+                </span>
+                <span className="dashboard-subscription-compact__item">
+                  <span className="dashboard-subscription-compact__label">
+                    {t('dashboard.subscriptionPlan')}
+                  </span>
+                  <span>{billingInfo.plan?.name ?? '—'}</span>
+                </span>
+                <span className="dashboard-subscription-compact__modules">
+                  <span className="dashboard-subscription-compact__label">
+                    {t('dashboard.subscriptionModules')}
+                  </span>
+                  <span>{billingInfo.enabledModules?.join(', ') ?? '—'}</span>
+                </span>
+                <Link to="/dashboard/billing" className="dashboard-subscription-compact__link">
+                  {t('dashboard.manageBilling')}
+                </Link>
+              </div>
+            </div>
+          )}
+
+          {billingInfo && billingInfo.subscriptionStatus !== 'read_only' && (
+            <div className="section-card dashboard-team-members-section">
+              <h3>{t('dashboard.teamMembers')}</h3>
+              <div className="form-field">
+                <input
+                  placeholder={t('dashboard.memberEmail')}
+                  value={memberEmail}
+                  onChange={(e) => setMemberEmail(e.target.value)}
+                />
+              </div>
+              <div className="form-row dashboard-team-add">
+                <select
+                  value={memberRole}
+                  onChange={(e) => setMemberRole(e.target.value)}
+                >
+                  <option value="manager">manager</option>
+                  <option value="cashier">cashier</option>
+                  <option value="warehouse_staff">warehouse_staff</option>
+                </select>
+                <select
+                  value={memberStoreId}
+                  onChange={(e) => setMemberStoreId(e.target.value)}
+                >
+                  <option value="">{t('dashboard.memberStore')}</option>
+                  {(stores as { _id: string; name: string }[] | undefined)?.map((s) => (
+                    <option key={s._id} value={s._id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <button
+                type="button"
+                className="dashboard-team-add__submit"
+                onClick={() => addMember.mutate()}
+                disabled={!memberEmail || addMember.isPending}
+              >
+                {t('dashboard.addMember')}
+              </button>
+              {addMember.isSuccess && <p className="status-ok">{t('dashboard.memberAdded')}</p>}
+              {addMember.error && (
+                <p className="status-fail">{(addMember.error as Error).message}</p>
+              )}
+            </div>
+          )}
         </div>
       )}
 
       {companyId && billingInfo?.subscriptionStatus !== 'read_only' && (
-        <div className="section-card">
-          <h3>{t('dashboard.inviteByEmail')}</h3>
+        <details className="section-card collapsible-section dashboard-invite-section">
+          <summary>{t('dashboard.inviteByEmail')}</summary>
           <div className="form-field">
             <label>{t('dashboard.inviteEmailNote')}</label>
             <textarea
@@ -556,56 +923,12 @@ export function DashboardPage() {
           ) : (
             <p style={{ fontSize: 13, marginTop: 8 }}>{t('dashboard.noPendingInvites')}</p>
           )}
-        </div>
+        </details>
       )}
 
       {companyId && billingInfo?.subscriptionStatus !== 'read_only' && (
-        <div className="section-card">
-          <h3>{t('dashboard.teamMembers')}</h3>
-          <input
-            placeholder={t('dashboard.memberEmail')}
-            value={memberEmail}
-            onChange={(e) => setMemberEmail(e.target.value)}
-            style={{ display: 'block', marginBottom: 8, width: '100%' }}
-          />
-          <select
-            value={memberRole}
-            onChange={(e) => setMemberRole(e.target.value)}
-            style={{ marginRight: 8 }}
-          >
-            <option value="manager">manager</option>
-            <option value="cashier">cashier</option>
-            <option value="warehouse_staff">warehouse_staff</option>
-          </select>
-          <select
-            value={memberStoreId}
-            onChange={(e) => setMemberStoreId(e.target.value)}
-            style={{ marginRight: 8 }}
-          >
-            <option value="">{t('dashboard.memberStore')}</option>
-            {(stores as { _id: string; name: string }[] | undefined)?.map((s) => (
-              <option key={s._id} value={s._id}>
-                {s.name}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            onClick={() => addMember.mutate()}
-            disabled={!memberEmail || addMember.isPending}
-          >
-            {t('dashboard.addMember')}
-          </button>
-          {addMember.isSuccess && <p className="status-ok">{t('dashboard.memberAdded')}</p>}
-          {addMember.error && (
-            <p className="status-fail">{(addMember.error as Error).message}</p>
-          )}
-        </div>
-      )}
-
-      {companyId && billingInfo?.subscriptionStatus !== 'read_only' && (
-        <div className="section-card" style={{ gridColumn: '1 / -1' }}>
-          <h3>{t('dashboard.integrations')}</h3>
+        <details className="section-card collapsible-section dashboard-integrations-section">
+          <summary>{t('dashboard.integrations')}</summary>
           <div className="form-field">
             <label>{t('dashboard.webhookUrl')}</label>
             <input
@@ -826,120 +1149,34 @@ export function DashboardPage() {
               </div>
             )}
           </div>
-        </div>
+        </details>
       )}
 
-      {companyId && (
-        <div className="section-card">
-          <h3>{t('dashboard.localeSettings')}</h3>
-          <div className="form-field">
-            <label>{t('dashboard.defaultLocale')}</label>
-            <select
-              value={companyDefaultLocale}
-              onChange={(e) => setCompanyDefaultLocale(e.target.value)}
-            >
-              <option value="en">English</option>
-              <option value="zh">中文</option>
-            </select>
           </div>
-          <button type="button" onClick={() => saveCompanyLocale.mutate()}>
-            {t('dashboard.saveLocale')}
-          </button>
-        </div>
+        </section>
+      )}
+
+      {editingStoreMember && companyId && (
+        <EditStoreMemberModal
+          member={editingStoreMember}
+          stores={storeList}
+          pending={updateStoreMember.isPending}
+          removePending={removeStoreMember.isPending}
+          onSave={(body) => updateStoreMember.mutate(body)}
+          onRemove={() => {
+            if (confirm(t('dashboard.confirmRemoveMember'))) {
+              removeStoreMember.mutate();
+            }
+          }}
+          onClose={() => {
+            if (updateStoreMember.isPending || removeStoreMember.isPending) return;
+            setEditingStoreMember(null);
+          }}
+        />
       )}
 
       {companyId && storeId && (
-        <div className="section-card">
-          <h3>{t('dashboard.storeProfile')}</h3>
-          <p style={{ marginTop: 0, fontSize: '0.875rem', color: 'var(--text-muted)' }}>
-            {t('dashboard.storeProfileHint')}
-          </p>
-          <div className="form-field">
-            <label>{t('dashboard.storeAddress')}</label>
-            <input value={storeAddress} onChange={(e) => setStoreAddress(e.target.value)} />
-          </div>
-          <div className="form-row">
-            <div className="form-field">
-              <label>{t('dashboard.storePhone')}</label>
-              <input value={storePhone} onChange={(e) => setStorePhone(e.target.value)} />
-            </div>
-            <div className="form-field">
-              <label>{t('dashboard.storeEmail')}</label>
-              <input
-                type="email"
-                value={storeEmail}
-                onChange={(e) => setStoreEmail(e.target.value)}
-              />
-            </div>
-          </div>
-          <button
-            type="button"
-            disabled={saveStoreProfile.isPending}
-            onClick={() => saveStoreProfile.mutate()}
-          >
-            {t('dashboard.saveStoreProfile')}
-          </button>
-        </div>
-      )}
-
-      {companyId && (
-        <div className="section-card">
-          <h3>{t('dashboard.stores')}</h3>
-          <ul className="clean-list">
-            {(stores as { _id: string; name: string; warehouseEnabled?: boolean }[] | undefined)?.map(
-              (s) => (
-                <li key={s._id} className="form-inline">
-                  <button
-                    type="button"
-                    className={storeId === s._id ? '' : 'btn-secondary btn-sm'}
-                    onClick={() => setStoreId(s._id)}
-                  >
-                    {t('common.select')}
-                  </button>
-                  <span>
-                    <strong>{s.name}</strong>
-                    {s.warehouseEnabled ? (
-                      <span className="badge" style={{ marginLeft: 6 }}>
-                        WH
-                      </span>
-                    ) : null}{' '}
-                    <span className="code">{s._id}</span>
-                  </span>
-                </li>
-              ),
-            )}
-          </ul>
-          <form
-            className="form-row"
-            style={{ marginTop: '1rem' }}
-            onSubmit={(e: FormEvent) => {
-              e.preventDefault();
-              createStore.mutate(storeName);
-            }}
-          >
-            <div className="form-field" style={{ flex: 2 }}>
-              <input
-                placeholder={t('dashboard.newStore')}
-                value={storeName}
-                onChange={(e) => setStoreName(e.target.value)}
-              />
-            </div>
-            <label className="form-inline" style={{ marginBottom: 0 }}>
-              <input
-                type="checkbox"
-                checked={warehouseStore}
-                onChange={(e) => setWarehouseStore(e.target.checked)}
-              />
-              {t('dashboard.warehouseFlag')}
-            </label>
-            <button type="submit">{t('dashboard.createStore')}</button>
-          </form>
-        </div>
-      )}
-      </div>
-
-      {companyId && storeId && (
-        <div className="alert alert-info" style={{ marginTop: '1rem' }}>
+        <div className="alert alert-info dashboard-ready-banner">
           {t('common.ready')}
         </div>
       )}

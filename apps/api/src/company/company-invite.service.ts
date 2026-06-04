@@ -196,14 +196,23 @@ export class CompanyInviteService {
         ? { storeId: invite.storeId }
         : { $or: [{ storeId: { $exists: false } }, { storeId: null }] }),
     });
-    if (existing) throw new BadRequestException('Already a member');
 
-    const membership = await this.membershipModel.create({
-      userId: user._id,
-      companyId: invite.companyId,
-      storeId: invite.storeId,
-      role: invite.role,
-    });
+    let membership;
+    if (existing) {
+      if (existing.role === invite.role) {
+        throw new BadRequestException('Already a member');
+      }
+      existing.role = invite.role;
+      await existing.save();
+      membership = existing;
+    } else {
+      membership = await this.membershipModel.create({
+        userId: user._id,
+        companyId: invite.companyId,
+        storeId: invite.storeId,
+        role: invite.role,
+      });
+    }
 
     invite.acceptedAt = new Date();
     invite.acceptedByUserId = new Types.ObjectId(userId);

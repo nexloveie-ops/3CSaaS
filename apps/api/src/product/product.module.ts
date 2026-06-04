@@ -7,6 +7,8 @@ import {
   InventoryPositionSchema,
   Product,
   ProductSchema,
+  StoreProductSetting,
+  StoreProductSettingSchema,
   TaxCategory,
   TaxCategorySchema,
 } from '@lz3c/db';
@@ -22,6 +24,7 @@ import { ProductService } from './product.service';
     MongooseModule.forFeature([
       { name: Product.name, schema: ProductSchema },
       { name: InventoryPosition.name, schema: InventoryPositionSchema },
+      { name: StoreProductSetting.name, schema: StoreProductSettingSchema },
       { name: TaxCategory.name, schema: TaxCategorySchema },
       { name: CatalogCategory.name, schema: CatalogCategorySchema },
     ]),

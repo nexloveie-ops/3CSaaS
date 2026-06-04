@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { sessionIsCashierOnly, normalizeMemberships } from '../lib/auth-session';
+import { sessionIsCashierOnly, normalizeMemberships, readPersistedAuth } from '../lib/auth-session';
+
+const persistedAuth = readPersistedAuth();
 
 interface AuthState {
   token: string | null;
@@ -13,8 +15,8 @@ interface AuthState {
 export const useAuthStore = create<AuthState>()(
   persist(
     (set) => ({
-      token: null,
-      cashierOnly: false,
+      token: persistedAuth.token,
+      cashierOnly: persistedAuth.cashierOnly,
       setToken: (token) =>
         set({
           token,

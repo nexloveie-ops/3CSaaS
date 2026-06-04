@@ -17,6 +17,7 @@ type VariantRow = {
   costPrice: number;
   retailPrice?: number;
   quantity: number;
+  posSalable?: boolean;
 };
 
 type Props = {

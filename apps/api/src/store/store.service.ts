@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -66,9 +67,15 @@ export class StoreService {
     });
     if (!store) throw new NotFoundException('Store not found');
 
+    if (dto.name !== undefined) {
+      const name = dto.name.trim();
+      if (!name) throw new BadRequestException('Store name is required');
+      store.name = name;
+    }
     if (dto.address !== undefined) store.address = dto.address.trim() || undefined;
     if (dto.phone !== undefined) store.phone = dto.phone.trim() || undefined;
     if (dto.email !== undefined) store.email = dto.email.trim() || undefined;
+    if (dto.warehouseEnabled !== undefined) store.warehouseEnabled = dto.warehouseEnabled;
     await store.save();
     return store;
   }

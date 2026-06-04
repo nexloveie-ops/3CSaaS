@@ -14,6 +14,7 @@ import {
 import { AuditService } from '../common/services/audit.service';
 import { CreateChainDto } from './dto/create-chain.dto';
 import { CompanyService } from '../company/company.service';
+import { InventoryService } from '../inventory/inventory.service';
 import { CreateShareRuleDto } from './dto/create-share-rule.dto';
 import { UpdateChainDto } from './dto/update-chain.dto';
 import { UpdateChainMembersDto } from './dto/update-chain-members.dto';
@@ -36,6 +37,7 @@ export type ChainListItem = {
 export class ChainService {
   constructor(
     private companyService: CompanyService,
+    private inventoryService: InventoryService,
     @InjectModel(Chain.name) private chainModel: Model<ChainDocument>,
     @InjectModel(StockShareRule.name)
     private ruleModel: Model<StockShareRuleDocument>,
@@ -263,6 +265,14 @@ export class ChainService {
         .populate('productId', 'name skuCode wholesalePrice costPrice')
         .lean();
 
+      const productIds = positions
+        .map((p) => (p.productId as unknown as { _id?: Types.ObjectId })?._id)
+        .filter(Boolean) as Types.ObjectId[];
+      const chainShareIds = await this.inventoryService.chainShareEnabledIds(
+        rule.sourceStoreId.toString(),
+        productIds,
+      );
+
       for (const pos of positions) {
         const prod = pos.productId as unknown as {
           _id: Types.ObjectId;
@@ -271,6 +281,7 @@ export class ChainService {
           wholesalePrice?: number;
           costPrice: number;
         };
+        if (!chainShareIds.has(prod._id.toString())) continue;
         let sharedQty = pos.quantity;
         if (rule.mode === 'percent') {
           sharedQty = Math.floor((pos.quantity * rule.value) / 100);

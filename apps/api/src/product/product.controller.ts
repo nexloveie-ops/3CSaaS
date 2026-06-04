@@ -30,6 +30,7 @@ export class ProductController {
   list(
     @CurrentUser() user: { userId: string },
     @Headers('x-company-id') companyId: string,
+    @Headers('x-store-id') storeId: string | undefined,
     @Query('productType') productType?: string,
     @Query('catalogCategoryId') catalogCategoryId?: string,
     @Query('q') q?: string,
@@ -40,6 +41,7 @@ export class ProductController {
       productType,
       catalogCategoryId,
       q,
+      storeId,
     );
   }
 

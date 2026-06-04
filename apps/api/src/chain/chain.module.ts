@@ -13,12 +13,14 @@ import {
   StoreSchema,
 } from '@lz3c/db';
 import { CompanyModule } from '../company/company.module';
+import { InventoryModule } from '../inventory/inventory.module';
 import { ChainController } from './chain.controller';
 import { ChainService } from './chain.service';
 
 @Module({
   imports: [
     CompanyModule,
+    InventoryModule,
     MongooseModule.forFeature([
       { name: Chain.name, schema: ChainSchema },
       { name: StockShareRule.name, schema: StockShareRuleSchema },

@@ -157,110 +157,119 @@ export function PriceListPage() {
         {t('priceList.subtitle')}
       </p>
 
-      <section className="section-card">
+      <section className="section-card price-list-brands">
         <h3>{t('priceList.setupBrands')}</h3>
         <form
-          className="form-row"
+          className="price-list-brand-add"
           onSubmit={(e: FormEvent) => {
             e.preventDefault();
             addBrand.mutate();
           }}
         >
-          <div className="form-field" style={{ flex: 1 }}>
-            <label>{t('priceList.addBrand')}</label>
-            <input
-              value={newBrand}
-              onChange={(e) => setNewBrand(e.target.value)}
-              placeholder="Apple"
-              required
-            />
-          </div>
-          <button type="submit" disabled={addBrand.isPending}>
+          <input
+            value={newBrand}
+            onChange={(e) => setNewBrand(e.target.value)}
+            placeholder={t('priceList.brandPlaceholder')}
+            required
+          />
+          <button type="submit" className="btn btn-primary btn-sm" disabled={addBrand.isPending}>
             {t('priceList.addBrand')}
           </button>
         </form>
-        <ul className="clean-list" style={{ marginTop: '1rem' }}>
-          {brandList.map((b) => (
-            <li key={b._id}>
-              <button
-                type="button"
-                className="btn btn-secondary"
-                style={{ marginRight: 8, fontSize: '0.75rem' }}
-                onClick={() =>
-                  setExpandedBrandId(expandedBrandId === b._id ? null : b._id)
-                }
-              >
-                {expandedBrandId === b._id ? '▼' : '▶'}
-              </button>
-              <strong>{b.name}</strong>
-              <button
-                type="button"
-                className="btn btn-secondary"
-                style={{ marginLeft: 8, fontSize: '0.75rem' }}
-                onClick={() => {
-                  if (confirm(t('priceList.confirmDeleteBrand'))) {
-                    api.deletePriceListBrand(b._id).then(() => {
-                      qc.invalidateQueries({ queryKey: ['price-list-brands'] });
-                      if (matrixBrandId === b._id) setMatrixBrandId('');
-                    });
-                  }
-                }}
-              >
-                {t('products.deleteCategory')}
-              </button>
-              {expandedBrandId === b._id && (
-                <div style={{ marginTop: 8, paddingLeft: 8 }}>
-                  <form
-                    className="form-row"
-                    onSubmit={(e: FormEvent) => {
-                      e.preventDefault();
-                      const name = newModelByBrand[b._id]?.trim();
-                      if (name) addModel.mutate({ brandId: b._id, name });
-                    }}
-                  >
-                    <div className="form-field" style={{ flex: 1 }}>
-                      <input
-                        value={newModelByBrand[b._id] ?? ''}
-                        onChange={(e) =>
-                          setNewModelByBrand((prev) => ({
-                            ...prev,
-                            [b._id]: e.target.value,
-                          }))
+
+        {brandList.length === 0 ? (
+          <p className="empty-state price-list-brand-empty">{t('priceList.noBrands')}</p>
+        ) : (
+          <ul className="price-list-brand-list">
+            {brandList.map((b) => {
+              const expanded = expandedBrandId === b._id;
+              return (
+                <li key={b._id} className={`price-list-brand-item${expanded ? ' is-expanded' : ''}`}>
+                  <div className="price-list-brand-row">
+                    <button
+                      type="button"
+                      className="price-list-brand-toggle"
+                      aria-expanded={expanded}
+                      aria-label={expanded ? t('priceList.collapseBrand') : t('priceList.expandBrand')}
+                      onClick={() => setExpandedBrandId(expanded ? null : b._id)}
+                    />
+                    <span className="price-list-brand-name">{b.name}</span>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm price-list-brand-delete"
+                      onClick={() => {
+                        if (confirm(t('priceList.confirmDeleteBrand'))) {
+                          api.deletePriceListBrand(b._id).then(() => {
+                            qc.invalidateQueries({ queryKey: ['price-list-brands'] });
+                            if (expandedBrandId === b._id) setExpandedBrandId(null);
+                            if (matrixBrandId === b._id) setMatrixBrandId('');
+                          });
                         }
-                        placeholder={t('priceList.addModel')}
-                      />
-                    </div>
-                    <button type="submit">{t('priceList.addModel')}</button>
-                  </form>
-                  <div className="price-model-chips">
-                    {(models as DeviceModel[] | undefined)?.map((m) => (
-                      <span key={m._id} className="price-model-chip">
-                        {m.name}
-                        <button
-                          type="button"
-                          className="price-model-chip-remove"
-                          aria-label={t('products.deleteCategory')}
-                          onClick={() => {
-                            api.deletePriceListModel(m._id).then(() => {
-                              qc.invalidateQueries({
-                                queryKey: ['price-list-models', b._id],
-                              });
-                              qc.invalidateQueries({
-                                queryKey: ['price-list-matrix', matrixBrandId],
-                              });
-                            });
-                          }}
-                        >
-                          ×
-                        </button>
-                      </span>
-                    ))}
+                      }}
+                    >
+                      {t('products.deleteCategory')}
+                    </button>
                   </div>
-                </div>
-              )}
-            </li>
-          ))}
-        </ul>
+
+                  {expanded && (
+                    <div className="price-list-brand-models">
+                      <form
+                        className="price-list-brand-model-add"
+                        onSubmit={(e: FormEvent) => {
+                          e.preventDefault();
+                          const name = newModelByBrand[b._id]?.trim();
+                          if (name) addModel.mutate({ brandId: b._id, name });
+                        }}
+                      >
+                        <input
+                          value={newModelByBrand[b._id] ?? ''}
+                          onChange={(e) =>
+                            setNewModelByBrand((prev) => ({
+                              ...prev,
+                              [b._id]: e.target.value,
+                            }))
+                          }
+                          placeholder={t('priceList.modelPlaceholder')}
+                        />
+                        <button type="submit" className="btn btn-secondary btn-sm">
+                          {t('priceList.addModel')}
+                        </button>
+                      </form>
+                      {(models as DeviceModel[] | undefined)?.length ? (
+                        <div className="price-model-chips">
+                          {(models as DeviceModel[] | undefined)?.map((m) => (
+                            <span key={m._id} className="price-model-chip">
+                              {m.name}
+                              <button
+                                type="button"
+                                className="price-model-chip-remove"
+                                aria-label={t('products.deleteCategory')}
+                                onClick={() => {
+                                  api.deletePriceListModel(m._id).then(() => {
+                                    qc.invalidateQueries({
+                                      queryKey: ['price-list-models', b._id],
+                                    });
+                                    qc.invalidateQueries({
+                                      queryKey: ['price-list-matrix', matrixBrandId],
+                                    });
+                                  });
+                                }}
+                              >
+                                ×
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="price-list-brand-models-empty">{t('priceList.noModelsYet')}</p>
+                      )}
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </section>
 
       <section className="section-card">

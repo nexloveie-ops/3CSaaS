@@ -62,6 +62,7 @@ export function AcceptInvitePage() {
         mode === 'login'
           ? await api.login(email, password)
           : await api.register(email, password, displayName, locale);
+      setToken(res.accessToken);
       await api.acceptInvite(inviteToken);
       await finishSession(res.accessToken);
     } catch (err) {

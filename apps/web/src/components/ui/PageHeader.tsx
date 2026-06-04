@@ -4,11 +4,12 @@ type Props = {
   title: string;
   description?: string;
   actions?: ReactNode;
+  className?: string;
 };
 
-export function PageHeader({ title, description, actions }: Props) {
+export function PageHeader({ title, description, actions, className }: Props) {
   return (
-    <header className="page-header">
+    <header className={className ? `page-header ${className}` : 'page-header'}>
       <div className="page-header-row">
         <div>
           <h2>{title}</h2>

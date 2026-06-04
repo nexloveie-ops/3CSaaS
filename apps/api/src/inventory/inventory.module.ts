@@ -11,6 +11,8 @@ import {
   SerialEventSchema,
   SerialUnit,
   SerialUnitSchema,
+  StoreProductSetting,
+  StoreProductSettingSchema,
 } from '@lz3c/db';
 import { CommonModule } from '../common/common.module';
 import { CompanyModule } from '../company/company.module';
@@ -29,6 +31,7 @@ import { InventoryService } from './inventory.service';
       { name: Product.name, schema: ProductSchema },
       { name: SerialUnit.name, schema: SerialUnitSchema },
       { name: SerialEvent.name, schema: SerialEventSchema },
+      { name: StoreProductSetting.name, schema: StoreProductSettingSchema },
     ]),
   ],
   controllers: [InventoryController],

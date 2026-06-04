@@ -4,16 +4,18 @@ import { useTranslation } from 'react-i18next';
 import { NavLink, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   isCashierNavPath,
-  isCashierOnlyUser,
   isCashierRouteAllowed,
+  isStoreBoundManager,
+  isStoreManagerRouteAllowed,
   membershipCompanyId,
   NAV_MODULE_REQUIREMENTS,
   resolveBoundStoreId,
+  STORE_MANAGER_LANDING_PATH,
   type MembershipLike,
 } from '@lz3c/shared';
 import { applyCompanyLocaleOverrides } from '../i18n';
 import { meQueryKey } from '../lib/query-keys';
-import { readPersistedCashierOnly } from '../lib/auth-session';
+import { readPersistedCashierOnly, resolveCashierOnlySession } from '../lib/auth-session';
 import { api } from '../lib/api';
 import { useAuthStore } from '../stores/auth';
 import { useContextStore } from '../stores/context';
@@ -34,6 +36,8 @@ type NavItem = {
   key: string;
   module: string | null;
   roles?: readonly string[];
+  hideForStoreManager?: boolean;
+  storeManagerOnly?: boolean;
   end?: boolean;
 };
 
@@ -41,17 +45,18 @@ const NAV_GROUPS: { id: string; labelKey: string; items: NavItem[] }[] = [
   {
     id: 'overview',
     labelKey: 'nav.groupOverview',
-    items: [{ to: '/dashboard', key: 'nav.overview', module: null, end: true }],
+    items: [{ to: '/dashboard', key: 'nav.overview', module: null, end: true, hideForStoreManager: true }],
   },
   {
     id: 'main',
     labelKey: 'nav.groupSales',
     items: [
-      { to: '/dashboard/pos', key: 'nav.pos', module: NAV_MODULE_REQUIREMENTS['/dashboard/pos'] },
-      { to: '/dashboard/repairs', key: 'nav.repairs', module: NAV_MODULE_REQUIREMENTS['/dashboard/repairs'] },
-      { to: '/dashboard/preorders', key: 'nav.preorders', module: NAV_MODULE_REQUIREMENTS['/dashboard/preorders'] },
+      { to: '/dashboard/pos', key: 'nav.pos', module: NAV_MODULE_REQUIREMENTS['/dashboard/pos'], hideForStoreManager: true },
+      { to: '/dashboard/repairs', key: 'nav.repairs', module: NAV_MODULE_REQUIREMENTS['/dashboard/repairs'], hideForStoreManager: true },
+      { to: '/dashboard/preorders', key: 'nav.preorders', module: NAV_MODULE_REQUIREMENTS['/dashboard/preorders'], hideForStoreManager: true },
       { to: '/dashboard/products', key: 'nav.products', module: NAV_MODULE_REQUIREMENTS['/dashboard/products'] },
       { to: '/dashboard/inventory', key: 'nav.inventory', module: NAV_MODULE_REQUIREMENTS['/dashboard/inventory'] },
+      { to: '/dashboard/store-catalog', key: 'nav.storeCatalog', module: NAV_MODULE_REQUIREMENTS['/dashboard/store-catalog'], storeManagerOnly: true },
       { to: '/dashboard/transfers', key: 'nav.transfers', module: NAV_MODULE_REQUIREMENTS['/dashboard/transfers'] },
       { to: '/dashboard/price-list', key: 'nav.priceList', module: NAV_MODULE_REQUIREMENTS['/dashboard/price-list'] },
       { to: '/dashboard/reports', key: 'nav.reports', module: NAV_MODULE_REQUIREMENTS['/dashboard/reports'] },
@@ -152,10 +157,16 @@ export function Layout() {
 
   const memberships = (me as { memberships?: MembershipLike[] })?.memberships ?? [];
   const cashierOnlyFlag = useAuthStore((s) => s.cashierOnly);
-  const isCashierAccount =
-    cashierOnlyFlag ||
-    readPersistedCashierOnly() ||
-    isCashierOnlyUser(memberships);
+  const setSessionFromMemberships = useAuthStore((s) => s.setSessionFromMemberships);
+  const isCashierAccount = resolveCashierOnlySession(
+    memberships,
+    cashierOnlyFlag || readPersistedCashierOnly(),
+  );
+
+  useEffect(() => {
+    if (!memberships.length) return;
+    setSessionFromMemberships(memberships);
+  }, [memberships, setSessionFromMemberships]);
 
   const boundStoreId = useMemo(
     () => (companyId ? resolveBoundStoreId(memberships, companyId) : null),
@@ -200,12 +211,22 @@ export function Layout() {
     return any?.role ?? null;
   }, [me, companyId, storeId]);
 
+  const isStoreManager = useMemo(
+    () => (companyId ? isStoreBoundManager(memberships, companyId) : false),
+    [memberships, companyId],
+  );
+
   const visibleGroups = useMemo(() => {
     const mods = enabledModules ?? company?.enabledModules;
     const groups = NAV_GROUPS.map((g) => ({
       ...g,
       items: g.items.filter((n) => {
         if (isCashierAccount && !isCashierNavPath(n.to)) {
+          return false;
+        }
+        if (isStoreManager) {
+          if (n.hideForStoreManager) return false;
+        } else if (n.storeManagerOnly) {
           return false;
         }
         if (n.roles && (!effectiveRole || !n.roles.includes(effectiveRole))) return false;
@@ -222,6 +243,7 @@ export function Layout() {
     company?.enabledModules,
     effectiveRole,
     isCashierAccount,
+    isStoreManager,
     storesFetched,
     transfersEnabled,
   ]);
@@ -259,6 +281,10 @@ export function Layout() {
 
   if (isCashier && !isCashierRouteAllowed(location.pathname)) {
     return <Navigate to="/dashboard/pos" replace />;
+  }
+
+  if (isStoreManager && !isStoreManagerRouteAllowed(location.pathname)) {
+    return <Navigate to={STORE_MANAGER_LANDING_PATH} replace />;
   }
 
   if (
@@ -386,7 +412,7 @@ export function Layout() {
           </div>
         ) : null}
 
-        {!companyId || !storeId ? (
+        {(!companyId || !storeId) && location.pathname !== '/dashboard/pos' ? (
           <div style={{ padding: '0 1.5rem' }}>
             <div className="alert alert-info">{t('common.setContextFirst')}</div>
           </div>

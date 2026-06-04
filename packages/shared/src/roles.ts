@@ -7,6 +7,15 @@ export const CASHIER_BLOCKED_NAV_PATHS = [
   '/dashboard/admin',
 ] as const;
 
+/** Retail paths store-bound managers must not access. */
+export const STORE_MANAGER_RETAIL_BLOCKED_PATHS = [
+  '/dashboard/pos',
+  '/dashboard/repairs',
+  '/dashboard/preorders',
+] as const;
+
+export const STORE_MANAGER_LANDING_PATH = '/dashboard/store-catalog';
+
 export type MembershipLike = {
   role?: string;
   companyId?: { _id?: string } | string;
@@ -56,7 +65,25 @@ export function isCashierOnlyUser(memberships: MembershipLike[]): boolean {
   );
 }
 
-/** Post-login route: cashiers land on POS; admins/managers on overview. */
+/** True when user is a manager assigned to a specific store (not company-wide). */
+export function isStoreBoundManagerUser(memberships: MembershipLike[]): boolean {
+  return memberships.some((m) => m.role === 'manager' && !!m.storeId);
+}
+
+export function isStoreBoundManager(
+  memberships: MembershipLike[],
+  companyId: string,
+): boolean {
+  const bound = resolveBoundStoreId(memberships, companyId);
+  if (!bound) return false;
+  return memberships.some((m) => {
+    const c = typeof m.companyId === 'object' ? m.companyId?._id : m.companyId;
+    const s = typeof m.storeId === 'object' ? m.storeId?._id : m.storeId;
+    return String(c) === companyId && String(s) === bound && m.role === 'manager';
+  });
+}
+
+/** Post-login route: cashiers land on POS; store managers on catalog; admins/managers on overview. */
 export function resolveLoginLandingPath(memberships: MembershipLike[]): string {
   if (!memberships.length) return '/dashboard';
   const hasElevated = memberships.some(
@@ -64,6 +91,7 @@ export function resolveLoginLandingPath(memberships: MembershipLike[]): string {
   );
   if (hasElevated) return '/dashboard';
   if (isCashierOnlyUser(memberships)) return '/dashboard/pos';
+  if (isStoreBoundManagerUser(memberships)) return STORE_MANAGER_LANDING_PATH;
   return '/dashboard';
 }
 
@@ -83,6 +111,20 @@ export function isCashierNavPath(pathname: string): boolean {
 
 export function isCashierRouteAllowed(pathname: string): boolean {
   return isCashierNavPath(pathname);
+}
+
+/** Store-bound managers: inventory ops only — no overview, retail POS / repairs / pre-orders. */
+export function isStoreManagerRouteAllowed(pathname: string): boolean {
+  const path = normalizeDashboardPath(pathname);
+  if (path === '/dashboard') return false;
+  if ((STORE_MANAGER_RETAIL_BLOCKED_PATHS as readonly string[]).includes(path)) {
+    return false;
+  }
+  if ((CASHIER_BLOCKED_NAV_PATHS as readonly string[]).includes(path)) {
+    return false;
+  }
+  if (path === '/dashboard' || path.startsWith('/dashboard/')) return true;
+  return false;
 }
 
 export function membershipCompanyId(m: MembershipLike): string | null {

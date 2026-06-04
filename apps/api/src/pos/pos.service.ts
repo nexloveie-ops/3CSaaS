@@ -395,6 +395,8 @@ export class PosService {
         .lean();
       if (!product) throw new BadRequestException(`Product ${line.productId} not found`);
 
+      await this.inventoryService.assertPosSalable(companyId, storeId, line.productId);
+
       if (product.productType === 'serialized') {
         if (!line.serialUnitId || !line.sn?.trim()) {
           throw new BadRequestException(

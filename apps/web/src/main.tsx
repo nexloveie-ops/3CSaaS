@@ -5,6 +5,7 @@ import { BrowserRouter } from 'react-router-dom';
 import App from './App';
 import './i18n';
 import './index.css';
+import './styles/dashboard-saas.css';
 
 const queryClient = new QueryClient();
 

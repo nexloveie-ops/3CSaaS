@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -16,6 +17,8 @@ import {
   SerialEventDocument,
   SerialUnit,
   SerialUnitDocument,
+  StoreProductSetting,
+  StoreProductSettingDocument,
 } from '@lz3c/db';
 import { AuditService } from '../common/services/audit.service';
 import { DocumentSequenceService } from '../common/services/document-sequence.service';
@@ -33,6 +36,8 @@ export class InventoryService {
     @InjectModel(Product.name) private productModel: Model<ProductDocument>,
     @InjectModel(SerialUnit.name) private serialModel: Model<SerialUnitDocument>,
     @InjectModel(SerialEvent.name) private eventModel: Model<SerialEventDocument>,
+    @InjectModel(StoreProductSetting.name)
+    private storeProductSettingModel: Model<StoreProductSettingDocument>,
     private companyService: CompanyService,
     private productService: ProductService,
     private docSeq: DocumentSequenceService,
@@ -53,6 +58,261 @@ export class InventoryService {
         populate: { path: 'parentProductId', select: 'name' },
       })
       .lean();
+  }
+
+  async listStoreCatalog(userId: string, companyId: string, storeId: string) {
+    await this.companyService.assertStoreAccess(userId, companyId, storeId);
+    const companyOid = new Types.ObjectId(companyId);
+    const storeOid = new Types.ObjectId(storeId);
+
+    const products = await this.productModel
+      .find({
+        companyId: companyOid,
+        productType: { $ne: 'service' },
+      })
+      .populate('catalogCategoryId', 'name')
+      .populate('parentProductId', 'name')
+      .sort({ name: 1 })
+      .lean();
+
+    const parentIdsWithVariants = new Set(
+      products
+        .filter((p) => (p.variantDimensions?.length ?? 0) > 0)
+        .map((p) => p._id.toString()),
+    );
+
+    const sellable = products.filter((p) => {
+      if (parentIdsWithVariants.has(p._id.toString())) return false;
+      return true;
+    });
+
+    const sellableIds = sellable.map((p) => p._id);
+    const positions = await this.positionModel
+      .find({
+        companyId: companyOid,
+        storeId: storeOid,
+        productId: { $in: sellableIds },
+      })
+      .lean();
+    const qtyByProduct = new Map(
+      positions.map((p) => [p.productId.toString(), p.quantity]),
+    );
+
+    const serializedIds = sellable
+      .filter((p) => p.productType === 'serialized')
+      .map((p) => p._id);
+    const serialCounts =
+      serializedIds.length > 0
+        ? await this.serialModel.aggregate<{ _id: Types.ObjectId; count: number }>([
+            {
+              $match: {
+                companyId: companyOid,
+                currentStoreId: storeOid,
+                productId: { $in: serializedIds },
+                status: 'in_stock',
+              },
+            },
+            { $group: { _id: '$productId', count: { $sum: 1 } } },
+          ])
+        : [];
+    const serialQtyByProduct = new Map(
+      serialCounts.map((row) => [row._id.toString(), row.count]),
+    );
+
+    const settings = await this.loadSettingsMap(
+      storeId,
+      sellable.map((p) => p._id.toString()),
+    );
+
+    return sellable.map((p) => {
+      const id = p._id.toString();
+      const quantity =
+        p.productType === 'serialized'
+          ? (serialQtyByProduct.get(id) ?? 0)
+          : (qtyByProduct.get(id) ?? 0);
+      const parent =
+        p.parentProductId && typeof p.parentProductId === 'object'
+          ? (p.parentProductId as { name?: string }).name
+          : undefined;
+      const category =
+        p.catalogCategoryId && typeof p.catalogCategoryId === 'object'
+          ? (p.catalogCategoryId as { _id?: Types.ObjectId; name?: string }).name
+          : undefined;
+      const catalogCategoryId =
+        p.catalogCategoryId && typeof p.catalogCategoryId === 'object'
+          ? (p.catalogCategoryId as { _id?: Types.ObjectId })._id?.toString()
+          : p.catalogCategoryId
+            ? String(p.catalogCategoryId)
+            : null;
+      const setting = settings.get(id);
+      return {
+        productId: id,
+        name: p.name,
+        parentName: parent,
+        variantValues: p.variantValues ?? [],
+        productType: p.productType,
+        skuCode: p.skuCode,
+        category,
+        catalogCategoryId,
+        retailPrice: p.retailPrice,
+        wholesalePrice: p.wholesalePrice,
+        costPrice: p.costPrice,
+        posSalable: setting?.posSalable ?? true,
+        chainShareEnabled: setting?.chainShareEnabled ?? false,
+        quantity,
+        quantityReadOnly: p.productType === 'serialized',
+      };
+    });
+  }
+
+  async updateStoreProductSetting(
+    userId: string,
+    companyId: string,
+    storeId: string,
+    productId: string,
+    dto: { posSalable?: boolean; chainShareEnabled?: boolean },
+  ) {
+    await this.companyService.assertStoreAccess(userId, companyId, storeId);
+    const role = await this.companyService.resolveRole(userId, companyId, storeId);
+
+    const product = await this.productModel.findOne({
+      _id: productId,
+      companyId: new Types.ObjectId(companyId),
+    });
+    if (!product) throw new NotFoundException('Product not found');
+
+    if (dto.chainShareEnabled !== undefined && role !== 'admin' && role !== 'manager') {
+      throw new ForbiddenException('Only store managers can change group sharing');
+    }
+    if (
+      dto.chainShareEnabled === true &&
+      (product.wholesalePrice == null || product.wholesalePrice <= 0)
+    ) {
+      throw new BadRequestException(
+        'Set a wholesale price before sharing with group stores',
+      );
+    }
+    if (dto.posSalable === undefined && dto.chainShareEnabled === undefined) {
+      throw new BadRequestException('No changes provided');
+    }
+
+    const $set: Partial<StoreProductSetting> = {};
+    if (dto.posSalable !== undefined) $set.posSalable = dto.posSalable;
+    if (dto.chainShareEnabled !== undefined) $set.chainShareEnabled = dto.chainShareEnabled;
+
+    const doc = await this.storeProductSettingModel.findOneAndUpdate(
+      {
+        storeId: new Types.ObjectId(storeId),
+        productId: new Types.ObjectId(productId),
+      },
+      {
+        $set,
+        $setOnInsert: {
+          companyId: new Types.ObjectId(companyId),
+          storeId: new Types.ObjectId(storeId),
+          productId: new Types.ObjectId(productId),
+        },
+      },
+      { upsert: true, new: true },
+    );
+
+    void this.audit.log({
+      companyId,
+      userId,
+      storeId,
+      action: 'inventory.store_product_setting',
+      entityType: 'store_product_setting',
+      entityId: productId,
+      metadata: dto,
+    });
+
+    return {
+      productId,
+      posSalable: doc.posSalable,
+      chainShareEnabled: doc.chainShareEnabled,
+    };
+  }
+
+  async assertPosSalable(companyId: string, storeId: string, productId: string) {
+    const setting = await this.storeProductSettingModel.findOne({
+      storeId: new Types.ObjectId(storeId),
+      productId: new Types.ObjectId(productId),
+    });
+    if (setting && !setting.posSalable) {
+      throw new BadRequestException('Product is not available for sale at this store');
+    }
+  }
+
+  async chainShareEnabledIds(storeId: string, productIds: Types.ObjectId[]) {
+    if (!productIds.length) return new Set<string>();
+    const rows = await this.storeProductSettingModel
+      .find({
+        storeId: new Types.ObjectId(storeId),
+        productId: { $in: productIds },
+        chainShareEnabled: true,
+      })
+      .select('productId')
+      .lean();
+    return new Set(rows.map((r) => r.productId.toString()));
+  }
+
+  async loadSettingsMap(storeId: string, productIds: string[]) {
+    if (!productIds.length) return new Map<string, { posSalable: boolean; chainShareEnabled: boolean }>();
+    const rows = await this.storeProductSettingModel
+      .find({
+        storeId: new Types.ObjectId(storeId),
+        productId: { $in: productIds.map((id) => new Types.ObjectId(id)) },
+      })
+      .lean();
+    return new Map(
+      rows.map((r) => [
+        r.productId.toString(),
+        { posSalable: r.posSalable !== false, chainShareEnabled: !!r.chainShareEnabled },
+      ]),
+    );
+  }
+
+  async setPositionQuantity(
+    userId: string,
+    companyId: string,
+    storeId: string,
+    productId: string,
+    quantity: number,
+  ) {
+    await this.companyService.assertStoreAccess(userId, companyId, storeId);
+    const product = await this.productModel.findOne({
+      _id: productId,
+      companyId: new Types.ObjectId(companyId),
+    });
+    if (!product) throw new NotFoundException('Product not found');
+    if (product.productType === 'serialized') {
+      throw new BadRequestException('Serialized stock is managed via serial numbers');
+    }
+    if (product.productType === 'service') {
+      throw new BadRequestException('Service products have no stock');
+    }
+
+    await this.positionModel.findOneAndUpdate(
+      {
+        companyId: new Types.ObjectId(companyId),
+        storeId: new Types.ObjectId(storeId),
+        productId: new Types.ObjectId(productId),
+      },
+      { $set: { quantity } },
+      { upsert: true, new: true },
+    );
+
+    void this.audit.log({
+      companyId,
+      userId,
+      storeId,
+      action: 'inventory.set_quantity',
+      entityType: 'inventory_position',
+      entityId: productId,
+      metadata: { quantity },
+    });
+
+    return { productId, quantity };
   }
 
   async listInbound(

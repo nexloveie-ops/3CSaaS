@@ -10,6 +10,8 @@ import {
   InventoryPositionDocument,
   Product,
   ProductDocument,
+  StoreProductSetting,
+  StoreProductSettingDocument,
   TaxCategory,
   TaxCategoryDocument,
 } from '@lz3c/db';
@@ -30,6 +32,8 @@ export class ProductService {
     @InjectModel(Product.name) private productModel: Model<ProductDocument>,
     @InjectModel(InventoryPosition.name)
     private positionModel: Model<InventoryPositionDocument>,
+    @InjectModel(StoreProductSetting.name)
+    private storeProductSettingModel: Model<StoreProductSettingDocument>,
     @InjectModel(TaxCategory.name)
     private taxModel: Model<TaxCategoryDocument>,
     private companyService: CompanyService,
@@ -42,6 +46,7 @@ export class ProductService {
     productType?: string,
     catalogCategoryId?: string,
     q?: string,
+    storeId?: string,
   ) {
     await this.companyService.assertMember(userId, companyId);
     const companyOid = new Types.ObjectId(companyId);
@@ -89,7 +94,9 @@ export class ProductService {
     const parentIds = products
       .filter((p) => p.variantDimensions?.length)
       .map((p) => p._id);
-    if (!parentIds.length) return products;
+    if (!parentIds.length) {
+      return this.attachPosSalable(products, storeId);
+    }
 
     const children = await this.productModel
       .find({
@@ -113,15 +120,34 @@ export class ProductService {
       }
     }
 
-    return products.map((p) => {
+    const withRanges = products.map((p) => {
       const range = rangeByParent.get(String(p._id));
       if (!range) return p;
-      return {
-        ...p,
-        variantPriceMin: range.min,
-        variantPriceMax: range.max,
-      };
+      return { ...p, variantPriceMin: range.min, variantPriceMax: range.max };
     });
+    return this.attachPosSalable(withRanges, storeId);
+  }
+
+  private async attachPosSalable<T extends { _id: Types.ObjectId }>(
+    rows: T[],
+    storeId?: string,
+  ): Promise<(T & { posSalable: boolean })[]> {
+    if (!storeId || !rows.length) {
+      return rows.map((p) => ({ ...p, posSalable: true }));
+    }
+    const settings = await this.storeProductSettingModel
+      .find({
+        storeId: new Types.ObjectId(storeId),
+        productId: { $in: rows.map((p) => p._id) },
+      })
+      .lean();
+    const byProduct = new Map(
+      settings.map((s) => [s.productId.toString(), s.posSalable !== false]),
+    );
+    return rows.map((p) => ({
+      ...p,
+      posSalable: byProduct.get(String(p._id)) ?? true,
+    }));
   }
 
   async getOne(userId: string, companyId: string, id: string) {
@@ -205,16 +231,25 @@ export class ProductService {
       positions.map((p) => [p.productId.toString(), p.quantity]),
     );
 
-    const variants = children
-      .filter((c) => qtyByProduct.has(c._id.toString()))
-      .map((c) => ({
-        _id: c._id.toString(),
-        name: c.name,
-        variantValues: c.variantValues ?? [],
-        costPrice: c.costPrice,
-        retailPrice: c.retailPrice,
-        quantity: qtyByProduct.get(c._id.toString())!,
-      }));
+    const settings = await this.storeProductSettingModel
+      .find({
+        storeId: new Types.ObjectId(storeId),
+        productId: { $in: childIds },
+      })
+      .lean();
+    const salableByProduct = new Map(
+      settings.map((s) => [s.productId.toString(), s.posSalable !== false]),
+    );
+
+    const variants = children.map((c) => ({
+      _id: c._id.toString(),
+      name: c.name,
+      variantValues: c.variantValues ?? [],
+      costPrice: c.costPrice,
+      retailPrice: c.retailPrice,
+      quantity: qtyByProduct.get(c._id.toString()) ?? 0,
+      posSalable: salableByProduct.get(c._id.toString()) ?? true,
+    }));
 
     return {
       parent: {
@@ -370,7 +405,15 @@ export class ProductService {
     });
     if (!current) throw new NotFoundException('Product not found');
     if (current.parentProductId) {
-      throw new BadRequestException('Edit variant via parent sync');
+      const variantPriceOnly = Object.keys(dto).every(
+        (k) =>
+          dto[k as keyof typeof dto] === undefined ||
+          k === 'wholesalePrice' ||
+          k === 'retailPrice',
+      );
+      if (!variantPriceOnly) {
+        throw new BadRequestException('Edit variant via parent sync');
+      }
     }
     if (dto.taxCategoryId) await this.assertTax(companyId, dto.taxCategoryId);
     if (dto.catalogCategoryId) {

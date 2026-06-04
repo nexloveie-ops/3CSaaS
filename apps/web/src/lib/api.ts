@@ -141,6 +141,42 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
+  listCompanyMembers: (companyId: string) =>
+    request<
+      {
+        _id: string;
+        userId: string;
+        email: string;
+        displayName?: string;
+        role: string;
+        storeId: string | null;
+        storeName: string | null;
+      }[]
+    >(`/companies/${companyId}/members`),
+
+  updateCompanyMember: (
+    companyId: string,
+    membershipId: string,
+    body: { displayName?: string; role?: string; storeId?: string },
+  ) =>
+    request<{
+      _id: string;
+      userId: string;
+      email: string;
+      displayName?: string;
+      role: string;
+      storeId: string | null;
+      storeName: string | null;
+    }>(`/companies/${companyId}/members/${membershipId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+
+  removeCompanyMember: (companyId: string, membershipId: string) =>
+    request<{ ok: boolean }>(`/companies/${companyId}/members/${membershipId}`, {
+      method: 'DELETE',
+    }),
+
   createInvite: (
     companyId: string,
     body: { email: string; role: string; storeId?: string },
@@ -299,13 +335,20 @@ export const api = {
       address?: string;
       phone?: string;
       email?: string;
+      warehouseEnabled?: boolean;
       repairTerms?: string;
       salesTerms?: string;
     }>(`/stores/${id}`),
 
   updateStoreProfile: (
     id: string,
-    body: { address?: string; phone?: string; email?: string },
+    body: {
+      name?: string;
+      address?: string;
+      phone?: string;
+      email?: string;
+      warehouseEnabled?: boolean;
+    },
   ) =>
     request(`/stores/${id}/profile`, {
       method: 'PATCH',
@@ -360,6 +403,9 @@ export const api = {
   createProduct: (body: Record<string, unknown>) =>
     request('/products', { method: 'POST', body: JSON.stringify(body) }),
 
+  updateProduct: (id: string, body: Record<string, unknown>) =>
+    request(`/products/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+
   listProductVariants: (parentId: string) =>
     request<{
       parent: {
@@ -390,6 +436,7 @@ export const api = {
         costPrice: number;
         retailPrice?: number;
         quantity: number;
+        posSalable?: boolean;
       }>;
     }>(`/products/${parentId}/variants/in-stock`),
 
@@ -411,6 +458,45 @@ export const api = {
     }),
 
   listInventory: () => request('/inventory/positions'),
+
+  listStoreCatalog: () =>
+    request<
+      Array<{
+        productId: string;
+        name: string;
+        parentName?: string;
+        variantValues: string[];
+        productType: string;
+        skuCode?: string;
+        category?: string;
+        catalogCategoryId?: string | null;
+        retailPrice?: number;
+        wholesalePrice?: number;
+        costPrice?: number;
+        posSalable: boolean;
+        chainShareEnabled: boolean;
+        quantity: number;
+        quantityReadOnly: boolean;
+      }>
+    >('/inventory/store-catalog'),
+
+  updateStoreProductSetting: (
+    productId: string,
+    body: { posSalable?: boolean; chainShareEnabled?: boolean },
+  ) =>
+    request(`/inventory/store-catalog/${productId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+
+  setInventoryQuantity: (productId: string, quantity: number) =>
+    request(`/inventory/positions/${productId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ quantity }),
+    }),
+
+  updateProduct: (id: string, body: Record<string, unknown>) =>
+    request(`/products/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
 
   listInboundReceipts: (opts?: { from?: string; to?: string }) => {
     const q = new URLSearchParams();
@@ -438,6 +524,14 @@ export const api = {
       }[]
     >(`/serials${qs ? `?${qs}` : ''}`);
   },
+
+  createSerial: (body: {
+    productId: string;
+    storeId: string;
+    sn: string;
+    purchaseCost?: number;
+    notes?: string;
+  }) => request('/serials', { method: 'POST', body: JSON.stringify(body) }),
 
   lookupSerial: async (sn: string) => {
     const res = await request<{

@@ -1,0 +1,336 @@
+/* Overview (/dashboard) — SaaS workspace styling */
+
+.main-content:has(.page-content--dashboard) {
+  max-width: none;
+  width: 100%;
+  background:
+    radial-gradient(1200px 420px at 0% -10%, rgba(37, 99, 235, 0.07), transparent 55%),
+    linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%);
+}
+
+.page-content--dashboard {
+  --dash-radius: 12px;
+  --dash-shadow: 0 1px 2px rgba(15, 23, 42, 0.05), 0 1px 3px rgba(15, 23, 42, 0.04);
+  --dash-shadow-md: 0 8px 24px rgba(15, 23, 42, 0.06);
+  width: 100%;
+  max-width: none;
+}
+
+.page-content--dashboard .dashboard-page-header {
+  margin-bottom: 1.25rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.9);
+}
+
+.page-content--dashboard .dashboard-page-header h2 {
+  font-size: 1.625rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: #0f172a;
+}
+
+.page-content--dashboard .dashboard-page-header p {
+  margin-top: 0.35rem;
+  font-size: 0.9375rem;
+  color: #64748b;
+}
+
+.page-content--dashboard .section-card {
+  border: 1px solid rgba(226, 232, 240, 0.95);
+  border-radius: var(--dash-radius);
+  box-shadow: var(--dash-shadow);
+  background: #fff;
+  padding: 1.125rem 1.25rem;
+  margin-bottom: 0.875rem;
+}
+
+.page-content--dashboard .dashboard-section-head h3,
+.page-content--dashboard .section-card > h3:first-child {
+  margin: 0 0 0.875rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.page-content--dashboard .dashboard-companies-section {
+  background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+  box-shadow: var(--dash-shadow-md);
+}
+
+.page-content--dashboard .dashboard-companies-create {
+  padding: 0.75rem;
+  border-radius: 10px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+}
+
+.page-content--dashboard .dashboard-companies-hint {
+  font-size: 0.8125rem;
+  color: #94a3b8;
+}
+
+.page-content--dashboard .dashboard-company-card {
+  min-height: 5.25rem;
+  padding: 0.875rem 1rem;
+  gap: 0.35rem;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  box-shadow: var(--dash-shadow);
+  transition:
+    transform 0.16s ease,
+    box-shadow 0.16s ease,
+    border-color 0.16s ease,
+    background 0.16s ease;
+}
+
+.page-content--dashboard button.dashboard-company-card:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: #cbd5e1;
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.08);
+  background: #fff;
+}
+
+.page-content--dashboard .dashboard-company-card--active {
+  border-color: rgba(37, 99, 235, 0.35);
+  background: linear-gradient(180deg, #f5f9ff 0%, #ffffff 100%);
+}
+
+.page-content--dashboard .dashboard-company-card--expanded {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+.page-content--dashboard .dashboard-company-card__name {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.page-content--dashboard .dashboard-company-card__badge {
+  background: #dbeafe;
+  color: #1d4ed8;
+  font-size: 0.6875rem;
+  font-weight: 600;
+}
+
+.page-content--dashboard .dashboard-company-panel {
+  border: 1px solid rgba(37, 99, 235, 0.14);
+  box-shadow: var(--dash-shadow-md);
+  overflow: hidden;
+}
+
+.page-content--dashboard .dashboard-company-panel__head {
+  margin: -1.125rem -1.25rem 1rem;
+  padding: 1rem 1.25rem;
+  background: linear-gradient(180deg, #f8faff 0%, #ffffff 100%);
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.page-content--dashboard .dashboard-company-panel__head h3 {
+  font-size: 1.125rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #0f172a;
+  text-transform: none;
+}
+
+.page-content--dashboard .dashboard-company-panel__sub {
+  color: #64748b;
+}
+
+.page-content--dashboard .collapsible-section summary {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: #64748b;
+  padding: 0.15rem 0;
+}
+
+.page-content--dashboard .collapsible-section summary::before {
+  content: '';
+  display: inline-block;
+  width: 0.42rem;
+  height: 0.42rem;
+  border-right: 2px solid #94a3b8;
+  border-bottom: 2px solid #94a3b8;
+  transform: rotate(-45deg);
+  margin-right: 0.55rem;
+  vertical-align: 0.12em;
+  transition: transform 0.18s ease;
+}
+
+.page-content--dashboard .collapsible-section[open] summary::before {
+  content: '';
+  transform: rotate(45deg);
+}
+
+.page-content--dashboard .dashboard-grid {
+  gap: 0.875rem;
+}
+
+.page-content--dashboard .dashboard-company-row {
+  gap: 0.875rem;
+}
+
+.page-content--dashboard .dashboard-company-row > .section-card {
+  background: #fafbfd;
+  transition: background 0.15s ease;
+}
+
+.page-content--dashboard .dashboard-company-row > .section-card:hover {
+  background: #fff;
+}
+
+.page-content--dashboard .dashboard-subscription-section h3,
+.page-content--dashboard .dashboard-team-members-section h3,
+.page-content--dashboard .dashboard-company-profile h3 {
+  font-size: 0.75rem;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.page-content--dashboard .dashboard-subscription-compact {
+  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 0.75rem 0.875rem;
+}
+
+.page-content--dashboard .dashboard-subscription-compact__link {
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.page-content--dashboard .dashboard-subscription-compact__link:hover {
+  text-decoration: underline;
+}
+
+.page-content--dashboard .dashboard-store-card {
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  box-shadow: var(--dash-shadow);
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.15s ease;
+}
+
+.page-content--dashboard button.dashboard-store-card:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: #cbd5e1;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.07);
+}
+
+.page-content--dashboard .dashboard-store-card--selected {
+  border-color: #2563eb;
+  background: linear-gradient(180deg, #eff6ff 0%, #ffffff 100%);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.page-content--dashboard .dashboard-store-card__badge {
+  background: #e0e7ff;
+  color: #3730a3;
+  font-size: 0.6875rem;
+}
+
+.page-content--dashboard .dashboard-stores-create {
+  border-bottom-color: #e8edf3;
+}
+
+.page-content--dashboard .dashboard-store-panel {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 0.875rem;
+}
+
+.page-content--dashboard .dashboard-store-profile,
+.page-content--dashboard .dashboard-store-staff {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 0.875rem;
+}
+
+.page-content--dashboard .dashboard-store-profile h4,
+.page-content--dashboard .dashboard-store-staff h4 {
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.page-content--dashboard input,
+.page-content--dashboard select,
+.page-content--dashboard textarea {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+  border-radius: 8px;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    background 0.15s ease;
+}
+
+.page-content--dashboard input:focus,
+.page-content--dashboard select:focus,
+.page-content--dashboard textarea:focus {
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+.page-content--dashboard label,
+.page-content--dashboard .form-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: #475569;
+}
+
+.page-content--dashboard button:not(.dashboard-company-card):not(.dashboard-store-card):not(.btn-secondary):not(.btn-danger) {
+  border-radius: 8px;
+  font-weight: 500;
+  box-shadow: 0 1px 2px rgba(37, 99, 235, 0.18);
+}
+
+.page-content--dashboard .btn-secondary {
+  border-radius: 8px;
+  box-shadow: none;
+}
+
+.page-content--dashboard .dashboard-card-hint,
+.page-content--dashboard .dashboard-stores-hint {
+  color: #94a3b8;
+  line-height: 1.45;
+}
+
+.page-content--dashboard .table-wrap {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.page-content--dashboard .table-wrap table {
+  font-size: 0.8125rem;
+}
+
+.page-content--dashboard .table-wrap th {
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.page-content--dashboard .dashboard-ready-banner {
+  border-radius: 10px;
+  border: 1px solid #bfdbfe;
+  background: linear-gradient(180deg, #eff6ff 0%, #f8fbff 100%);
+}

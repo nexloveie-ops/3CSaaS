@@ -15,6 +15,7 @@ import { AuthGuard } from '@nestjs/passport';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { CompanyService } from './company.service';
 import { AddMemberDto } from './dto/add-member.dto';
+import { UpdateMemberDto } from './dto/update-member.dto';
 import { CreateInviteDto } from './dto/create-invite.dto';
 import { CreateCompanyDto } from './dto/create-company.dto';
 import { UpdateCompanyLocaleDto } from './dto/update-company-locale.dto';
@@ -52,6 +53,14 @@ export class CompanyController {
     return this.companyService.getOne(user.userId, id);
   }
 
+  @Get(':id/members')
+  listMembers(
+    @CurrentUser() user: { userId: string },
+    @Param('id') id: string,
+  ) {
+    return this.companyService.listMembers(user.userId, id);
+  }
+
   @Post(':id/members')
   addMember(
     @CurrentUser() user: { userId: string },
@@ -59,6 +68,25 @@ export class CompanyController {
     @Body() dto: AddMemberDto,
   ) {
     return this.companyService.addMember(user.userId, id, dto);
+  }
+
+  @Patch(':id/members/:membershipId')
+  updateMember(
+    @CurrentUser() user: { userId: string },
+    @Param('id') id: string,
+    @Param('membershipId') membershipId: string,
+    @Body() dto: UpdateMemberDto,
+  ) {
+    return this.companyService.updateMember(user.userId, id, membershipId, dto);
+  }
+
+  @Delete(':id/members/:membershipId')
+  removeMember(
+    @CurrentUser() user: { userId: string },
+    @Param('id') id: string,
+    @Param('membershipId') membershipId: string,
+  ) {
+    return this.companyService.removeMember(user.userId, id, membershipId);
   }
 
   @Get(':id/invites')

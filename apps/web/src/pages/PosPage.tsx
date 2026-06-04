@@ -285,6 +285,26 @@ export function PosPage() {
     }
   }
 
+  function renderProductTile(p: PosProduct) {
+    return (
+      <button
+        key={p._id}
+        type="button"
+        className="pos-product-tile"
+        onClick={() => onProductClick(p)}
+      >
+        <span className="pos-product-name">{p.name}</span>
+        {p.productType === 'serialized' && (
+          <span className="badge">{t('pos.serializedBadge')}</span>
+        )}
+        {!!p.variantDimensions?.length && (
+          <span className="badge">{t('pos.variantBadge')}</span>
+        )}
+        <span className="pos-product-price">{tilePriceLabel(p)}</span>
+      </button>
+    );
+  }
+
   function removeLine(index: number) {
     setCart(cart.filter((_, i) => i !== index));
   }
@@ -423,23 +443,7 @@ export function PosPage() {
                 <>
                   <h4 className="pos-catalog-results-label">{t('pos.catalogSearchProducts')}</h4>
                   <div className="pos-product-grid">
-                    {searchProductList.map((p) => (
-                      <button
-                        key={p._id}
-                        type="button"
-                        className="pos-product-tile"
-                        onClick={() => onProductClick(p)}
-                      >
-                        <span className="pos-product-name">{p.name}</span>
-                        {p.productType === 'serialized' && (
-                          <span className="badge">{t('pos.serializedBadge')}</span>
-                        )}
-                        {!!p.variantDimensions?.length && (
-                          <span className="badge">{t('pos.variantBadge')}</span>
-                        )}
-                        <span className="pos-product-price">{tilePriceLabel(p)}</span>
-                      </button>
-                    ))}
+                    {searchProductList.map((p) => renderProductTile(p))}
                   </div>
                 </>
               )}
@@ -538,23 +542,7 @@ export function PosPage() {
                 <p className="empty-state">{t('pos.noProductsInCatalog')}</p>
               )}
               <div className="pos-product-grid">
-                {productList.map((p) => (
-                  <button
-                    key={p._id}
-                    type="button"
-                    className="pos-product-tile"
-                    onClick={() => onProductClick(p)}
-                  >
-                    <span className="pos-product-name">{p.name}</span>
-                    {p.productType === 'serialized' && (
-                      <span className="badge">{t('pos.serializedBadge')}</span>
-                    )}
-                    {!!p.variantDimensions?.length && (
-                      <span className="badge">{t('pos.variantBadge')}</span>
-                    )}
-                    <span className="pos-product-price">{tilePriceLabel(p)}</span>
-                  </button>
-                ))}
+                {productList.map((p) => renderProductTile(p))}
               </div>
             </>
           )}

@@ -182,6 +182,22 @@ export class CompanyService {
     return best.role;
   }
 
+  async listMembers(userId: string, companyId: string) {
+    const actor = await this.assertMember(userId, companyId);
+    if (actor.role !== 'admin') {
+      throw new ForbiddenException('Only company admins can list members');
+    }
+
+    const rows = await this.membershipModel
+      .find({ companyId: new Types.ObjectId(companyId) })
+      .populate('userId', 'email displayName')
+      .populate('storeId', 'name')
+      .sort({ role: 1, createdAt: 1 })
+      .lean();
+
+    return rows.map((m) => this.formatMemberRow(m));
+  }
+
   async addMember(
     actorUserId: string,
     companyId: string,
@@ -230,6 +246,152 @@ export class CompanyService {
     });
 
     return membership;
+  }
+
+  private formatMemberRow(m: {
+    _id: Types.ObjectId;
+    role: string;
+    userId:
+      | { _id?: Types.ObjectId; email?: string; displayName?: string }
+      | Types.ObjectId
+      | undefined;
+    storeId?: { _id?: Types.ObjectId; name?: string } | Types.ObjectId | null;
+  }) {
+    const user = m.userId;
+    const store = m.storeId;
+    const userObj = user && typeof user === 'object' && 'email' in user ? user : undefined;
+    const storeObj = store && typeof store === 'object' && 'name' in store ? store : undefined;
+
+    return {
+      _id: m._id.toString(),
+      userId: userObj?._id?.toString() ?? (user as Types.ObjectId | undefined)?.toString() ?? '',
+      email: userObj?.email ?? '',
+      displayName: userObj?.displayName ?? '',
+      role: m.role,
+      storeId: storeObj?._id?.toString() ?? (store as Types.ObjectId | null | undefined)?.toString() ?? null,
+      storeName: storeObj?.name ?? null,
+    };
+  }
+
+  async updateMember(
+    actorUserId: string,
+    companyId: string,
+    membershipId: string,
+    dto: { displayName?: string; role?: string; storeId?: string },
+  ) {
+    const actor = await this.assertMember(actorUserId, companyId);
+    if (actor.role !== 'admin') {
+      throw new ForbiddenException('Only company admins can update members');
+    }
+
+    const membership = await this.membershipModel.findOne({
+      _id: new Types.ObjectId(membershipId),
+      companyId: new Types.ObjectId(companyId),
+    });
+    if (!membership) throw new NotFoundException('Membership not found');
+
+    if (dto.displayName !== undefined) {
+      const name = dto.displayName.trim();
+      if (!name) throw new BadRequestException('displayName required');
+      await this.userModel.updateOne(
+        { _id: membership.userId },
+        { $set: { displayName: name } },
+      );
+    }
+
+    const nextRole = dto.role ?? membership.role;
+    const allowed = ['admin', 'manager', 'cashier', 'warehouse_staff'];
+    if (!allowed.includes(nextRole)) {
+      throw new BadRequestException('Invalid role');
+    }
+
+    let nextStoreId: string | null = membership.storeId?.toString() ?? null;
+    if (dto.storeId !== undefined) {
+      nextStoreId = dto.storeId || null;
+    }
+    if (dto.role !== undefined || dto.storeId !== undefined) {
+      if (nextRole === 'admin') {
+        nextStoreId = null;
+      } else if (['cashier', 'warehouse_staff'].includes(nextRole) && !nextStoreId) {
+        throw new BadRequestException('storeId required for cashier and warehouse_staff');
+      }
+    }
+
+    const storeFilter = nextStoreId
+      ? { storeId: new Types.ObjectId(nextStoreId) }
+      : { $or: [{ storeId: { $exists: false } }, { storeId: null }] };
+
+    const conflict = await this.membershipModel.findOne({
+      _id: { $ne: membership._id },
+      userId: membership.userId,
+      companyId: new Types.ObjectId(companyId),
+      ...storeFilter,
+    });
+    if (conflict) throw new ConflictException('Membership already exists for this store');
+
+    membership.role = nextRole;
+    if (nextStoreId) {
+      membership.storeId = new Types.ObjectId(nextStoreId);
+    } else {
+      membership.storeId = undefined;
+    }
+    await membership.save();
+
+    void this.audit.log({
+      companyId,
+      userId: actorUserId,
+      storeId: nextStoreId ?? undefined,
+      action: 'company.member_update',
+      entityType: 'membership',
+      entityId: membership._id.toString(),
+      metadata: { role: nextRole, storeId: nextStoreId },
+    });
+
+    const row = await this.membershipModel
+      .findById(membership._id)
+      .populate('userId', 'email displayName')
+      .populate('storeId', 'name')
+      .lean();
+    if (!row) throw new NotFoundException('Membership not found');
+    return this.formatMemberRow(row);
+  }
+
+  async removeMember(actorUserId: string, companyId: string, membershipId: string) {
+    const actor = await this.assertMember(actorUserId, companyId);
+    if (actor.role !== 'admin') {
+      throw new ForbiddenException('Only company admins can remove members');
+    }
+
+    const membership = await this.membershipModel.findOne({
+      _id: new Types.ObjectId(membershipId),
+      companyId: new Types.ObjectId(companyId),
+    });
+    if (!membership) throw new NotFoundException('Membership not found');
+
+    if (membership.role === 'admin' && !membership.storeId) {
+      const adminCount = await this.membershipModel.countDocuments({
+        companyId: new Types.ObjectId(companyId),
+        role: 'admin',
+        $or: [{ storeId: { $exists: false } }, { storeId: null }],
+      });
+      if (adminCount <= 1) {
+        throw new BadRequestException('Cannot remove the last company admin');
+      }
+    }
+
+    await membership.deleteOne();
+
+    void this.audit.log({
+      companyId,
+      userId: actorUserId,
+      storeId: membership.storeId?.toString(),
+      action: 'company.member_remove',
+      entityType: 'membership',
+      entityId: membershipId,
+      metadata: { role: membership.role },
+    });
+
+    return { ok: true };
   }
 
   async updateLocale(

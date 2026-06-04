@@ -1,6 +1,11 @@
-import { IsEmail, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsBoolean, IsEmail, IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class UpdateStoreProfileDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  name?: string;
+
   @IsOptional()
   @IsString()
   @MaxLength(500)
@@ -15,4 +20,8 @@ export class UpdateStoreProfileDto {
   @IsEmail()
   @MaxLength(120)
   email?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  warehouseEnabled?: boolean;
 }

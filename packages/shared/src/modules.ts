@@ -33,4 +33,5 @@ export const NAV_MODULE_REQUIREMENTS: Record<string, ModuleId> = {
   '/dashboard/transfers': 'inventory',
   '/dashboard/reports': 'report',
   '/dashboard/customers': 'crm',
+  '/dashboard/store-catalog': 'inventory',
 };

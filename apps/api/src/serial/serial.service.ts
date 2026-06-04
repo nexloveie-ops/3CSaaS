@@ -6,6 +6,8 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import {
+  InventoryPosition,
+  InventoryPositionDocument,
   Product,
   ProductDocument,
   SerialEvent,
@@ -24,6 +26,8 @@ export class SerialService {
     @InjectModel(SerialUnit.name) private serialModel: Model<SerialUnitDocument>,
     @InjectModel(SerialEvent.name) private eventModel: Model<SerialEventDocument>,
     @InjectModel(Product.name) private productModel: Model<ProductDocument>,
+    @InjectModel(InventoryPosition.name)
+    private positionModel: Model<InventoryPositionDocument>,
     private companyService: CompanyService,
   ) {}
 
@@ -80,18 +84,51 @@ export class SerialService {
       throw new BadRequestException('Product must be serialized type');
     }
 
+    const sn = dto.sn.trim();
+    const existing = await this.serialModel.findOne({
+      companyId: new Types.ObjectId(companyId),
+      sn,
+    });
+    if (existing) {
+      throw new BadRequestException(`SN already exists: ${sn}`);
+    }
+
+    const status = dto.status ?? 'in_stock';
+
     const unit = await this.serialModel.create({
       companyId: new Types.ObjectId(companyId),
       productId: new Types.ObjectId(dto.productId),
-      sn: dto.sn.trim(),
-      status: dto.status ?? 'in_stock',
+      sn,
+      status,
       purchaseCost: dto.purchaseCost ?? product.costPrice,
       currentStoreId: new Types.ObjectId(dto.storeId),
       notes: dto.notes,
     });
 
     await this.logEvent(unit._id, 'created', undefined, unit.status, userId);
+
+    if (status === 'in_stock') {
+      await this.adjustQty(companyId, dto.storeId, dto.productId, 1);
+    }
+
     return unit;
+  }
+
+  private async adjustQty(
+    companyId: string,
+    storeId: string,
+    productId: string,
+    delta: number,
+  ) {
+    await this.positionModel.findOneAndUpdate(
+      {
+        companyId: new Types.ObjectId(companyId),
+        storeId: new Types.ObjectId(storeId),
+        productId: new Types.ObjectId(productId),
+      },
+      { $inc: { quantity: delta } },
+      { upsert: true, new: true },
+    );
   }
 
   async updateStatus(

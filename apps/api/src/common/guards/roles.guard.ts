@@ -51,6 +51,12 @@ const CASHIER_DENIED_RULES: { method: string; pattern: RegExp }[] = [
   },
 ];
 
+const STORE_MANAGER_DENIED_RULES: { method: string; pattern: RegExp }[] = [
+  { method: 'ANY', pattern: /^\/pos(\/|$)/ },
+  { method: 'ANY', pattern: /^\/work-orders(\/|$)/ },
+  { method: 'ANY', pattern: /^\/preorders(\/|$)/ },
+];
+
 const PUBLIC_PATH_RULES: { method: string; pattern: RegExp }[] = [
   { method: 'GET', pattern: /^\/invites\// },
   { method: 'POST', pattern: /^\/auth\/accept-invite$/ },
@@ -117,7 +123,17 @@ export class RolesGuard implements CanActivate {
     }
     const role = await this.companyService.resolveRole(userId, companyId, storeId);
 
-    if (role === 'admin' || role === 'manager') return true;
+    if (role === 'admin') return true;
+
+    if (role === 'manager') {
+      const bound = await this.companyService.resolveBoundStoreId(userId, companyId);
+      if (bound) {
+        if (pathRuleMatches(STORE_MANAGER_DENIED_RULES, method, path)) {
+          throw new ForbiddenException('Store manager: retail access denied');
+        }
+      }
+      return true;
+    }
 
     if (role === 'cashier') {
       if (pathRuleMatches(CASHIER_DENIED_RULES, method, path)) {
