@@ -144,7 +144,7 @@ export function ProductsPage() {
 
   const deleteCategory = useMutation({
     mutationFn: (id: string) => api.deleteCatalogCategory(id),
-    onSuccess: () => {
+    onSuccess: (_, id) => {
       qc.invalidateQueries({ queryKey: ['catalog-categories'] });
       qc.invalidateQueries({ queryKey: ['products'] });
       if (selectedCategoryId === id) setSelectedCategoryId(null);

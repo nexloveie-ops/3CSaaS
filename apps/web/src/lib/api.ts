@@ -495,9 +495,6 @@ export const api = {
       body: JSON.stringify({ quantity }),
     }),
 
-  updateProduct: (id: string, body: Record<string, unknown>) =>
-    request(`/products/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
-
   listInboundReceipts: (opts?: { from?: string; to?: string }) => {
     const q = new URLSearchParams();
     if (opts?.from) q.set('from', opts.from);
