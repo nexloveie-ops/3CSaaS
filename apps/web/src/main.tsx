@@ -6,6 +6,7 @@ import App from './App';
 import './i18n';
 import './index.css';
 import './styles/dashboard-saas.css';
+import './styles/portal-light.css';
 
 const queryClient = new QueryClient();
 

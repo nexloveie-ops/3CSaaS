@@ -1,90 +1,28 @@
-import { useQuery } from '@tanstack/react-query';
-import { useTranslation } from 'react-i18next';
-import { Link, Navigate, Route, Routes } from 'react-router-dom';
+import { Navigate, Route, Routes } from 'react-router-dom';
 import { CashierRouteGuard } from './components/CashierRouteGuard';
 import { Layout } from './components/Layout';
-import { api } from './lib/api';
-import { LoginPage } from './pages/LoginPage';
-import { DashboardIndex } from './pages/DashboardIndex';
-import { ProductsPage } from './pages/ProductsPage';
-import { InventoryPage } from './pages/InventoryPage';
-import { PosPage } from './pages/PosPage';
+import { readPersistedAuth } from './lib/auth-session';
+import { AcceptInvitePage } from './pages/AcceptInvitePage';
+import { AdminPage } from './pages/AdminPage';
+import { AuditPage } from './pages/AuditPage';
+import { B2bPage } from './pages/B2bPage';
+import { BillingPage } from './pages/BillingPage';
+import { ChainPage } from './pages/ChainPage';
 import { CustomersPage } from './pages/CustomersPage';
-import { RepairsPage } from './pages/RepairsPage';
+import { DashboardIndex } from './pages/DashboardIndex';
+import { HomePage } from './pages/HomePage';
+import { InventoryPage } from './pages/InventoryPage';
+import { LoginPage } from './pages/LoginPage';
+import { PosPage } from './pages/PosPage';
 import { PreordersPage } from './pages/PreordersPage';
 import { PriceListPage } from './pages/PriceListPage';
-import { B2bPage } from './pages/B2bPage';
-import { TransfersPage } from './pages/TransfersPage';
+import { ProductsPage } from './pages/ProductsPage';
+import { RepairsPage } from './pages/RepairsPage';
 import { ReportsPage } from './pages/ReportsPage';
-import { BillingPage } from './pages/BillingPage';
-import { AdminPage } from './pages/AdminPage';
-import { WarehousePage } from './pages/WarehousePage';
 import { StoreCatalogPage } from './pages/StoreCatalogPage';
-import { ChainPage } from './pages/ChainPage';
-import { AcceptInvitePage } from './pages/AcceptInvitePage';
-import { AuditPage } from './pages/AuditPage';
+import { TransfersPage } from './pages/TransfersPage';
+import { WarehousePage } from './pages/WarehousePage';
 import { useAuthStore } from './stores/auth';
-import { normalizeMemberships, readPersistedAuth, readPersistedCashierOnly } from './lib/auth-session';
-import { meQueryKey } from './lib/query-keys';
-import { resolveLoginLandingPath } from '@lz3c/shared';
-
-function HealthCard() {
-  const { t } = useTranslation();
-  const { data, isLoading, error } = useQuery({
-    queryKey: ['health'],
-    queryFn: () => api.getHealth(),
-    refetchInterval: 30000,
-  });
-
-  return (
-    <div className="card" style={{ textAlign: 'left', width: '100%', maxWidth: 420 }}>
-      <h3>{t('home.apiMongo')}</h3>
-      {isLoading && <p>{t('common.checking')}</p>}
-      {error && <p className="status-fail">{(error as Error).message}</p>}
-      {data && (
-        <pre className={`code-block ${data.status === 'ok' ? 'status-ok' : 'status-fail'}`}>
-          {JSON.stringify(data, null, 2)}
-        </pre>
-      )}
-    </div>
-  );
-}
-
-function HomePage() {
-  const { t } = useTranslation();
-  const token = useAuthStore((s) => s.token);
-  const cashierOnly = useAuthStore((s) => s.cashierOnly);
-  const { data: me } = useQuery({
-    queryKey: meQueryKey(token),
-    queryFn: () => api.me(),
-    enabled: !!token,
-  });
-  const dashboardPath =
-    cashierOnly || readPersistedCashierOnly()
-      ? '/dashboard/pos'
-      : me
-        ? resolveLoginLandingPath(normalizeMemberships(me.memberships))
-        : '/dashboard';
-
-  return (
-    <div className="marketing-page">
-      <div className="marketing-hero">
-        <h1>{t('app.title')}</h1>
-        <p>{t('app.tagline')}</p>
-        {token ? (
-          <Link to={dashboardPath} className="btn btn-primary" style={{ display: 'inline-block' }}>
-            {t('home.dashboardLink')}
-          </Link>
-        ) : (
-          <Link to="/login" className="btn btn-primary" style={{ display: 'inline-block' }}>
-            {t('home.loginLink')}
-          </Link>
-        )}
-      </div>
-      <HealthCard />
-    </div>
-  );
-}
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const token = useAuthStore((s) => s.token) ?? readPersistedAuth().token;

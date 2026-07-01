@@ -2665,13 +2665,6 @@ pre.code-block {
   color: var(--pos-tiffany-dark);
 }
 
-.pos-cart-item__unit {
-  display: block;
-  font-size: 0.7rem;
-  color: var(--text-muted);
-  font-variant-numeric: tabular-nums;
-}
-
 .pos-cart-item__total {
   display: block;
   font-size: 0.9375rem;

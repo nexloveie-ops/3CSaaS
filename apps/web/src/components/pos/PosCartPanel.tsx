@@ -161,11 +161,6 @@ export function PosCartPanel({
                             €{line.price.toFixed(2)}
                           </span>
                         )}
-                        {line.qty > 1 && (
-                          <span className="pos-cart-item__unit">
-                            × {line.qty}
-                          </span>
-                        )}
                         {(line.qty > 1 || !priceEditable) && (
                           <span className="pos-cart-item__total">
                             €{lineTotal.toFixed(2)}
