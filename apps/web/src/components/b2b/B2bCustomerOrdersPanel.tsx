@@ -23,6 +23,17 @@ type Props = {
   customerId: string;
 };
 
+async function downloadInvoicePdf(orderId: string, docNumber: string) {
+  await api.generateReceiptPdf(orderId);
+  const blob = await api.fetchReceiptPdf(orderId);
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${docNumber}.pdf`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 function statusLabel(
   status: OrderRow['paymentStatus'],
   t: (key: string) => string,
@@ -52,6 +63,8 @@ export function B2bCustomerOrdersPanel({ customerId }: Props) {
   const qc = useQueryClient();
   const [paying, setPaying] = useState<B2bInvoicePaymentOrder | null>(null);
   const [payError, setPayError] = useState<string | null>(null);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
 
   const { data: orders, isLoading } = useQuery({
     queryKey: ['b2b-customer-orders', customerId],
@@ -121,23 +134,41 @@ export function B2bCustomerOrdersPanel({ customerId }: Props) {
                   </td>
                   <td>€{Number(o.paidAmount || 0).toFixed(2)}</td>
                   <td>
-                    {unpaid && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
                       <button
                         type="button"
-                        className="btn btn-primary btn-sm"
+                        className="btn btn-secondary btn-sm"
+                        disabled={downloadingId === o._id}
                         onClick={() => {
-                          setPayError(null);
-                          setPaying({
-                            _id: o._id,
-                            docNumber: o.docNumber,
-                            totalIncVat: o.totalIncVat,
-                            paidAmount: o.paidAmount,
-                          });
+                          setDownloadError(null);
+                          setDownloadingId(o._id);
+                          downloadInvoicePdf(o._id, o.docNumber)
+                            .catch((e) => setDownloadError((e as Error).message))
+                            .finally(() => setDownloadingId(null));
                         }}
                       >
-                        {t('b2bCustomers.pay')}
+                        {downloadingId === o._id
+                          ? t('b2bCustomers.downloadingPdf')
+                          : t('b2bCustomers.downloadPdf')}
                       </button>
-                    )}
+                      {unpaid && (
+                        <button
+                          type="button"
+                          className="btn btn-primary btn-sm"
+                          onClick={() => {
+                            setPayError(null);
+                            setPaying({
+                              _id: o._id,
+                              docNumber: o.docNumber,
+                              totalIncVat: o.totalIncVat,
+                              paidAmount: o.paidAmount,
+                            });
+                          }}
+                        >
+                          {t('b2bCustomers.pay')}
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               );
@@ -145,6 +176,10 @@ export function B2bCustomerOrdersPanel({ customerId }: Props) {
           </tbody>
         </table>
       </div>
+
+      {downloadError && (
+        <p className="status-fail" style={{ marginTop: '0.75rem' }}>{downloadError}</p>
+      )}
 
       {paying && (
         <B2bInvoicePaymentModal

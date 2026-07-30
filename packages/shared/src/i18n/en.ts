@@ -731,6 +731,8 @@ export const enMessages = {
     payMethod: 'Payment method',
     payAmount: 'Amount',
     paySubmit: 'Save payment',
+    downloadPdf: 'Download PDF',
+    downloadingPdf: 'Downloading…',
     methodCash: 'Cash',
     methodCard: 'Card',
     methodBank: 'Bank transfer',

@@ -43,20 +43,30 @@ export class PosReceiptPdfService {
     return this.pdfBrowser.htmlToPdfBuffer(html, { width: '80mm' });
   }
 
-  async ensureStored(
-    userId: string,
-    companyId: string,
-    storeId: string,
-    orderId: string,
-  ) {
-    await this.companyService.assertStoreAccess(userId, companyId, storeId);
+  /** Resolve POS receipt / B2B invoice by company (use order's store for access + render). */
+  private async loadPosDocument(userId: string, companyId: string, orderId: string) {
     const order = await this.orderModel.findOne({
       _id: orderId,
       companyId: new Types.ObjectId(companyId),
-      storeId: new Types.ObjectId(storeId),
       docType: { $in: ['receipt', 'invoice_b2b'] },
     });
     if (!order) throw new NotFoundException('Document not found');
+    const orderStoreId = String(order.storeId);
+    await this.companyService.assertStoreAccess(userId, companyId, orderStoreId);
+    return { order, orderStoreId };
+  }
+
+  async ensureStored(
+    userId: string,
+    companyId: string,
+    _storeId: string,
+    orderId: string,
+  ) {
+    const { order, orderStoreId } = await this.loadPosDocument(
+      userId,
+      companyId,
+      orderId,
+    );
 
     if (order.pdfStorageKey) {
       const existing = await this.storage.read(order.pdfStorageKey);
@@ -75,7 +85,7 @@ export class PosReceiptPdfService {
     const pdf = await this.renderPdfBuffer(
       userId,
       companyId,
-      storeId,
+      orderStoreId,
       orderId,
       order.docType,
     );
@@ -98,17 +108,10 @@ export class PosReceiptPdfService {
   async getPdfBuffer(
     userId: string,
     companyId: string,
-    storeId: string,
+    _storeId: string,
     orderId: string,
   ) {
-    await this.companyService.assertStoreAccess(userId, companyId, storeId);
-    const order = await this.orderModel.findOne({
-      _id: orderId,
-      companyId: new Types.ObjectId(companyId),
-      storeId: new Types.ObjectId(storeId),
-      docType: { $in: ['receipt', 'invoice_b2b'] },
-    });
-    if (!order) throw new NotFoundException('Document not found');
+    const { order } = await this.loadPosDocument(userId, companyId, orderId);
 
     if (order.pdfStorageKey) {
       const buf = await this.storage.read(order.pdfStorageKey);
@@ -122,7 +125,7 @@ export class PosReceiptPdfService {
       }
     }
 
-    const result = await this.ensureStored(userId, companyId, storeId, orderId);
+    const result = await this.ensureStored(userId, companyId, String(order.storeId), orderId);
     const buf = await this.storage.read(result.storageKey);
     if (!buf) throw new ServiceUnavailableException('PDF storage read failed');
     return {
