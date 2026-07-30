@@ -26,7 +26,16 @@ ENV NODE_ENV=production
 ENV SERVE_WEB=1
 ENV HOST=0.0.0.0
 ENV PORT=8080
-ENV USE_CHROMIUM=1
+# System Chromium (Alpine). @sparticuz/chromium is glibc/Lambda-only and fails here.
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+
+RUN apk add --no-cache \
+    chromium \
+    nss \
+    freetype \
+    harfbuzz \
+    ca-certificates \
+    ttf-freefont
 
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/apps/api/dist ./apps/api/dist

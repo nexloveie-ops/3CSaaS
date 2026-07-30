@@ -24,18 +24,26 @@ export class PdfBrowserService implements OnModuleDestroy {
 
     this.browserPromise = (async () => {
       try {
+        // Containers (Cloud Run / Docker) need these; /dev/shm is often tiny.
+        const containerArgs = [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-gpu',
+          '--font-render-hinting=none',
+        ];
         if (process.env.PUPPETEER_EXECUTABLE_PATH) {
           const puppeteer = await import('puppeteer-core');
           this.browser = await puppeteer.default.launch({
             executablePath: process.env.PUPPETEER_EXECUTABLE_PATH,
             headless: true,
-            args: ['--no-sandbox', '--disable-setuid-sandbox'],
+            args: containerArgs,
           });
         } else if (process.env.NODE_ENV === 'production' || process.env.USE_CHROMIUM === '1') {
           const puppeteer = await import('puppeteer-core');
           const chromium = await import('@sparticuz/chromium');
           this.browser = await puppeteer.default.launch({
-            args: chromium.default.args,
+            args: [...chromium.default.args, ...containerArgs],
             executablePath: await chromium.default.executablePath(),
             headless: true,
           });
@@ -45,6 +53,7 @@ export class PdfBrowserService implements OnModuleDestroy {
         }
         return this.browser!;
       } catch (err) {
+        this.browserPromise = null;
         this.logger.warn(`PDF browser unavailable: ${(err as Error).message}`);
         throw new ServiceUnavailableException(
           'PDF generation unavailable (install Chrome or set PUPPETEER_EXECUTABLE_PATH)',

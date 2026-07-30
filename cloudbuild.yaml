@@ -36,9 +36,9 @@ steps:
       - --port=8080
       - --timeout=300
       - --cpu=1
-      - --memory=1Gi
+      - --memory=2Gi
       - --set-secrets=MONGODB_URI=lz3c-mongodb-uri:latest,JWT_SECRET=lz3c-jwt-secret:latest
-      - --set-env-vars=MONGODB_DB_NAME=lz3c,NODE_ENV=production,USE_CHROMIUM=1
+      - --set-env-vars=MONGODB_DB_NAME=lz3c,NODE_ENV=production,PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 
 images:
   - ${_DEPLOY_REGION}-docker.pkg.dev/$PROJECT_ID/lz3c/${_SERVICE_NAME}:$SHORT_SHA
