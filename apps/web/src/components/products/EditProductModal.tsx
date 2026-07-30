@@ -7,6 +7,7 @@ import { ProductSerialPanel } from './ProductSerialPanel';
 export type ProductEditRow = {
   _id: string;
   name: string;
+  nameEn?: string;
   productType: string;
   costPrice: number;
   retailPrice?: number;
@@ -46,6 +47,7 @@ export function EditProductModal({ product, onClose, onManageVariants }: Props) 
   const { t } = useTranslation();
   const qc = useQueryClient();
   const [name, setName] = useState(product.name);
+  const [nameEn, setNameEn] = useState(product.nameEn ?? '');
   const [catalogCategoryId, setCatalogCategoryId] = useState(refId(product.catalogCategoryId));
   const [taxCategoryId, setTaxCategoryId] = useState(refId(product.taxCategoryId));
   const [costPrice, setCostPrice] = useState(String(product.costPrice));
@@ -69,6 +71,7 @@ export function EditProductModal({ product, onClose, onManageVariants }: Props) 
 
   useEffect(() => {
     setName(product.name);
+    setNameEn(product.nameEn ?? '');
     setCatalogCategoryId(refId(product.catalogCategoryId));
     setTaxCategoryId(refId(product.taxCategoryId));
     setCostPrice(String(product.costPrice));
@@ -80,6 +83,7 @@ export function EditProductModal({ product, onClose, onManageVariants }: Props) 
     mutationFn: () =>
       api.updateProduct(product._id, {
         name: name.trim(),
+        nameEn: nameEn.trim() || undefined,
         catalogCategoryId: catalogCategoryId || null,
         taxCategoryId: taxCategoryId || undefined,
         costPrice: Number(costPrice),
@@ -118,6 +122,15 @@ export function EditProductModal({ product, onClose, onManageVariants }: Props) 
           <label className="form-field preorder-form__full">
             <span>{t('products.productName')}</span>
             <input value={name} onChange={(e) => setName(e.target.value)} required autoFocus />
+          </label>
+          <label className="form-field preorder-form__full">
+            <span>{t('products.productNameEn')}</span>
+            <input
+              value={nameEn}
+              onChange={(e) => setNameEn(e.target.value)}
+              placeholder={t('products.productNameEnPlaceholder')}
+              autoComplete="off"
+            />
           </label>
           <label className="form-field preorder-form__full">
             <span>{t('products.productType')}</span>

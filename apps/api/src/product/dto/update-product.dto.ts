@@ -16,6 +16,11 @@ export class UpdateProductDto {
 
   @IsOptional()
   @IsString()
+  @MinLength(1)
+  nameEn?: string;
+
+  @IsOptional()
+  @IsString()
   skuCode?: string;
 
   @IsOptional()

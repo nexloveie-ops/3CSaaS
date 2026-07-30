@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PageHeader } from '../components/ui/PageHeader';
+import { B2bCustomerPickModal, type B2bCustomerOption } from '../components/pos/B2bCustomerPickModal';
 import { SerialPickModal, type PosProduct } from '../components/pos/SerialPickModal';
 import { PosCartPanel, type CartLine } from '../components/pos/PosCartPanel';
 import type { SalePaymentPayload } from '../components/pos/PosCheckout';
@@ -11,6 +12,7 @@ import { VariantPickModal } from '../components/pos/VariantPickModal';
 import { QuickSaleModal } from '../components/pos/QuickSaleModal';
 import { SalePrintPromptModal } from '../components/pos/SalePrintPromptModal';
 import { api } from '../lib/api';
+import { useContextStore } from '../stores/context';
 
 const REPAIR_SECTION_ID = '__repairs__';
 
@@ -64,6 +66,9 @@ async function downloadReceiptPdf(orderId: string, docNumber: string, hasPdf?: b
 export function PosPage() {
   const { t } = useTranslation();
   const qc = useQueryClient();
+  const storeId = useContextStore((s) => s.storeId);
+  const enabledModules = useContextStore((s) => s.enabledModules);
+  const hasB2bModule = !!enabledModules?.includes('b2b');
 
   const { data: categories } = useQuery({
     queryKey: ['catalog-categories'],
@@ -81,6 +86,8 @@ export function PosPage() {
   const [serialPickProduct, setSerialPickProduct] = useState<PosProduct | null>(null);
   const [variantPickProduct, setVariantPickProduct] = useState<PosProduct | null>(null);
   const [quickSaleOpen, setQuickSaleOpen] = useState(false);
+  const [b2bPickOpen, setB2bPickOpen] = useState(false);
+  const [b2bCustomer, setB2bCustomer] = useState<B2bCustomerOption | null>(null);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedSearch(catalogSearch.trim()), 300);
@@ -94,20 +101,21 @@ export function PosPage() {
       : undefined;
 
   const { data: products, isLoading: productsLoading } = useQuery({
-    queryKey: ['products', selectedCategoryId],
+    queryKey: ['products', selectedCategoryId, storeId],
     queryFn: () =>
       api.listProducts({ catalogCategoryId: selectedCategoryId! }),
     enabled:
       selectedCategoryId != null &&
       selectedCategoryId !== REPAIR_SECTION_ID &&
-      !searchActive,
+      !searchActive &&
+      !!storeId,
   });
 
   const { data: searchProducts, isLoading: searchProductsLoading } = useQuery({
-    queryKey: ['products-search', debouncedSearch, categoryFilter],
+    queryKey: ['products-search', debouncedSearch, categoryFilter, storeId],
     queryFn: () =>
       api.listProducts({ q: debouncedSearch, catalogCategoryId: categoryFilter }),
-    enabled: searchActive,
+    enabled: searchActive && !!storeId,
   });
 
   const { data: searchSerials, isLoading: searchSerialsLoading } = useQuery({
@@ -127,6 +135,11 @@ export function PosPage() {
   const [printPromptOpen, setPrintPromptOpen] = useState(false);
   const [pendingPayment, setPendingPayment] = useState<SalePaymentPayload | null>(null);
   const printAfterSaleRef = useRef(false);
+  const b2bPreviewWinRef = useRef<Window | null>(null);
+  const cartRef = useRef(cart);
+  const b2bCustomerRef = useRef(b2bCustomer);
+  cartRef.current = cart;
+  b2bCustomerRef.current = b2bCustomer;
 
   const cartSerialIds = useMemo(
     () => new Set(cart.filter((c) => c.serialUnitId).map((c) => c.serialUnitId!)),
@@ -152,6 +165,10 @@ export function PosPage() {
   );
 
   function requestCheckout(payment: SalePaymentPayload) {
+    if (b2bCustomer) {
+      previewInvoice.mutate();
+      return;
+    }
     setPendingPayment(payment);
     setPrintPromptOpen(true);
   }
@@ -170,29 +187,119 @@ export function PosPage() {
     setPendingPayment(null);
   }
 
+  const cartLinesPayload = (lines: CartLine[] = cartRef.current) =>
+    lines.map((c) =>
+      c.adHoc
+        ? {
+            adHocDescription: c.name,
+            quantity: c.qty,
+            unitPriceIncVat: c.price,
+            taxCategoryId: c.taxCategoryId,
+            catalogCategoryId: c.catalogCategoryId,
+            costPreTax: c.costPrice,
+          }
+        : {
+            productId: c.productId!,
+            quantity: c.qty,
+            unitPriceIncVat: c.price,
+            serialUnitId: c.serialUnitId,
+            sn: c.sn,
+            workOrderId: c.workOrderId,
+          },
+    );
+
+  function notifyB2bPreview(result: Record<string, unknown>) {
+    const win = b2bPreviewWinRef.current;
+    if (win && !win.closed) {
+      win.postMessage({ type: 'lz3c-b2b-confirm-result', ...result }, '*');
+    }
+  }
+
+  const previewInvoice = useMutation({
+    mutationFn: async () => {
+      if (!b2bCustomer) throw new Error('B2B customer required');
+      const html = await api.previewB2bInvoice({
+        b2bCustomerId: b2bCustomer._id,
+        lines: cartLinesPayload(),
+      });
+      const w = window.open('', '_blank', 'width=900,height=700');
+      if (w) {
+        b2bPreviewWinRef.current = w;
+        w.document.write(html);
+        w.document.close();
+      }
+    },
+  });
+
+  const confirmB2bInvoice = useMutation({
+    mutationFn: async () => {
+      const customer = b2bCustomerRef.current;
+      const lines = cartRef.current;
+      if (!customer) throw new Error('B2B customer required');
+      if (!lines.length) throw new Error('Cart is empty');
+      return api.confirmB2bInvoice({
+        b2bCustomerId: customer._id,
+        lines: cartLinesPayload(lines),
+      });
+    },
+    onSuccess: (result) => {
+      const emailNote =
+        result.email.mode === 'mock'
+          ? '邮件已模拟发送（未配置 SendGrid）'
+          : result.email.mode === 'skipped'
+            ? '买家没有邮箱'
+            : result.email.mode === 'sendgrid_error' || result.email.mode === 'smtp_error'
+              ? '邮件发送失败'
+              : undefined;
+      notifyB2bPreview({
+        ok: true,
+        docNumber: result.docNumber,
+        emailSent: result.email.sent,
+        emailTo: result.email.to,
+        emailNote,
+      });
+      setCart([]);
+      setB2bCustomer(null);
+      setLastOrderId(result._id);
+      setSelectedCategoryId(null);
+      qc.invalidateQueries({ queryKey: ['orders-today'] });
+      qc.invalidateQueries({ queryKey: ['inventory'] });
+      qc.invalidateQueries({ queryKey: ['products'] });
+      qc.invalidateQueries({ queryKey: ['products-search'] });
+      qc.invalidateQueries({ queryKey: ['serials'] });
+      qc.invalidateQueries({ queryKey: ['work-orders'] });
+      qc.invalidateQueries({ queryKey: ['work-orders-payable'] });
+      window.setTimeout(() => qc.invalidateQueries({ queryKey: ['orders-today'] }), 3000);
+    },
+    onError: (err) => {
+      notifyB2bPreview({
+        ok: false,
+        error: err instanceof Error ? err.message : 'Confirm failed',
+      });
+    },
+  });
+
+  const confirmB2bMutateRef = useRef(confirmB2bInvoice.mutate);
+  const confirmB2bPendingRef = useRef(false);
+  confirmB2bMutateRef.current = confirmB2bInvoice.mutate;
+  confirmB2bPendingRef.current = confirmB2bInvoice.isPending;
+
+  useEffect(() => {
+    function onMessage(event: MessageEvent) {
+      if (event.data?.type !== 'lz3c-b2b-confirm-send') return;
+      if (confirmB2bPendingRef.current) return;
+      confirmB2bMutateRef.current();
+    }
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, []);
+
   const sale = useMutation({
     mutationFn: (payment: SalePaymentPayload) =>
       api.createSale({
         ...payment,
-        lines: cart.map((c) =>
-          c.adHoc
-            ? {
-                adHocDescription: c.name,
-                quantity: c.qty,
-                unitPriceIncVat: c.price,
-                taxCategoryId: c.taxCategoryId,
-                catalogCategoryId: c.catalogCategoryId,
-                costPreTax: c.costPrice,
-              }
-            : {
-                productId: c.productId!,
-                quantity: c.qty,
-                unitPriceIncVat: c.price,
-                serialUnitId: c.serialUnitId,
-                sn: c.sn,
-                workOrderId: c.workOrderId,
-              },
-        ),
+        b2bCustomerId: b2bCustomer?._id,
+        lines: cartLinesPayload(),
         workOrderIds: cart.filter((c) => c.workOrderId).map((c) => c.workOrderId!),
       }),
     onError: () => {
@@ -200,6 +307,7 @@ export function PosPage() {
     },
     onSuccess: (order) => {
       setCart([]);
+      setB2bCustomer(null);
       setLastOrderId(order._id);
       setSelectedCategoryId(null);
       if (printAfterSaleRef.current) {
@@ -208,6 +316,8 @@ export function PosPage() {
       }
       qc.invalidateQueries({ queryKey: ['orders-today'] });
       qc.invalidateQueries({ queryKey: ['inventory'] });
+      qc.invalidateQueries({ queryKey: ['products'] });
+      qc.invalidateQueries({ queryKey: ['products-search'] });
       qc.invalidateQueries({ queryKey: ['serials'] });
       qc.invalidateQueries({ queryKey: ['work-orders'] });
       qc.invalidateQueries({ queryKey: ['work-orders-payable'] });
@@ -285,6 +395,14 @@ export function PosPage() {
     }
   }
 
+  function sellableQty(p: PosProduct): number {
+    const stock = p.quantity ?? 0;
+    const reserved = cart
+      .filter((c) => c.productId === p._id)
+      .reduce((sum, c) => sum + c.qty, 0);
+    return Math.max(0, stock - reserved);
+  }
+
   function renderProductTile(p: PosProduct) {
     return (
       <button
@@ -300,6 +418,9 @@ export function PosPage() {
         {!!p.variantDimensions?.length && (
           <span className="badge">{t('pos.variantBadge')}</span>
         )}
+        <span className="pos-product-meta">
+          {t('pos.stock')}: {sellableQty(p)}
+        </span>
         <span className="pos-product-price">{tilePriceLabel(p)}</span>
       </button>
     );
@@ -552,7 +673,13 @@ export function PosPage() {
           lines={cart}
           total={total}
           checkoutDisabled={!cart.length || printPromptOpen}
-          checkoutPending={sale.isPending}
+          checkoutPending={
+            sale.isPending || previewInvoice.isPending || confirmB2bInvoice.isPending
+          }
+          showB2bButton={hasB2bModule}
+          b2bCustomerName={b2bCustomer?.name}
+          onOpenB2bPick={() => setB2bPickOpen(true)}
+          onClearB2b={() => setB2bCustomer(null)}
           onRemove={removeLine}
           onUpdateQty={updateLineQty}
           onUpdatePrice={updateLinePrice}
@@ -609,6 +736,16 @@ export function PosPage() {
         <QuickSaleModal
           onAdd={addQuickSaleLine}
           onClose={() => setQuickSaleOpen(false)}
+        />
+      )}
+
+      {b2bPickOpen && (
+        <B2bCustomerPickModal
+          onSelect={(c) => {
+            setB2bCustomer(c);
+            setB2bPickOpen(false);
+          }}
+          onClose={() => setB2bPickOpen(false)}
         />
       )}
 

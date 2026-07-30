@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 export type SalePaymentPayload = {
-  paymentMethod: 'cash' | 'card' | 'mixed';
+  paymentMethod: 'cash' | 'card' | 'mixed' | 'other';
   amountTendered?: number;
   cashAmount?: number;
   cardAmount?: number;
@@ -12,6 +12,8 @@ type Props = {
   total: number;
   disabled?: boolean;
   pending?: boolean;
+  /** Wholesale / B2B cart — no till payment, preview invoice instead. */
+  b2bMode?: boolean;
   onSubmit: (payment: SalePaymentPayload) => void;
 };
 
@@ -20,7 +22,7 @@ function parseAmount(s: string): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-export function PosCheckout({ total, disabled, pending, onSubmit }: Props) {
+export function PosCheckout({ total, disabled, pending, b2bMode, onSubmit }: Props) {
   const { t } = useTranslation();
   const [method, setMethod] = useState<'cash' | 'card' | 'mixed'>('cash');
   const [amountTendered, setAmountTendered] = useState('');
@@ -29,13 +31,14 @@ export function PosCheckout({ total, disabled, pending, onSubmit }: Props) {
   const prevTotalRef = useRef(total);
 
   useEffect(() => {
+    if (b2bMode) return;
     if (method === 'cash' && !amountTendered) {
       setAmountTendered(total > 0 ? total.toFixed(2) : '');
     }
-  }, [method, total]);
+  }, [method, total, amountTendered, b2bMode]);
 
   useEffect(() => {
-    if (method !== 'cash') {
+    if (b2bMode || method !== 'cash') {
       prevTotalRef.current = total;
       return;
     }
@@ -47,7 +50,7 @@ export function PosCheckout({ total, disabled, pending, onSubmit }: Props) {
       }
     }
     prevTotalRef.current = total;
-  }, [total, method, amountTendered]);
+  }, [total, method, amountTendered, b2bMode]);
 
   const changeDue = useMemo(() => {
     if (method !== 'cash') return 0;
@@ -64,6 +67,7 @@ export function PosCheckout({ total, disabled, pending, onSubmit }: Props) {
 
   function canSubmit(): boolean {
     if (total <= 0) return false;
+    if (b2bMode) return true;
     if (method === 'cash') return parseAmount(amountTendered) + 0.001 >= total;
     if (method === 'card') return true;
     const cash = parseAmount(mixedCash);
@@ -73,6 +77,10 @@ export function PosCheckout({ total, disabled, pending, onSubmit }: Props) {
 
   function handleSubmit() {
     if (!canSubmit()) return;
+    if (b2bMode) {
+      onSubmit({ paymentMethod: 'other' });
+      return;
+    }
     if (method === 'cash') {
       onSubmit({
         paymentMethod: 'cash',
@@ -89,6 +97,22 @@ export function PosCheckout({ total, disabled, pending, onSubmit }: Props) {
       cashAmount: parseAmount(mixedCash),
       cardAmount: parseAmount(mixedCard),
     });
+  }
+
+  if (b2bMode) {
+    return (
+      <div className="pos-checkout pos-checkout--b2b">
+        <p className="pos-change-hint">{t('pos.b2bCheckoutHint')}</p>
+        <button
+          type="button"
+          className="btn btn-primary pos-checkout-submit"
+          disabled={disabled || pending || !canSubmit()}
+          onClick={handleSubmit}
+        >
+          {pending ? t('common.checking') : t('pos.previewInvoice')}
+        </button>
+      </div>
+    );
   }
 
   return (

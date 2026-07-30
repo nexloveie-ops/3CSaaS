@@ -20,6 +20,7 @@ export * from './schemas/price-list-item.schema';
 export * from './schemas/work-order.schema';
 export * from './schemas/preorder.schema';
 export * from './schemas/b2b-order.schema';
+export * from './schemas/b2b-customer.schema';
 export * from './schemas/invoice.schema';
 export * from './schemas/transfer-order.schema';
 export * from './schemas/warehouse-scope.schema';

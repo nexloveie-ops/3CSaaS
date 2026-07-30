@@ -88,6 +88,7 @@ export const api = {
       address?: string;
       contactPhone?: string;
       contactEmail?: string;
+      bankAccount?: string;
       defaultLocale?: string;
       enabledLocales?: string[];
       localeOverrides?: Record<string, Record<string, unknown>>;
@@ -104,6 +105,7 @@ export const api = {
       address?: string;
       contactPhone?: string;
       contactEmail?: string;
+      bankAccount?: string;
     },
   ) =>
     request(`/companies/${companyId}/profile`, {
@@ -577,6 +579,32 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
+  previewB2bInvoice: async (body: Record<string, unknown>) => {
+    const res = await fetch(`${BASE}/pos/b2b-invoice-preview`, {
+      method: 'POST',
+      headers: { ...(headers() as Record<string, string>), 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(
+        (err as { message?: string }).message ?? 'Failed to preview invoice',
+      );
+    }
+    return res.text();
+  },
+
+  confirmB2bInvoice: (body: Record<string, unknown>) =>
+    request<{
+      _id: string;
+      docNumber: string;
+      totalIncVat: number;
+      email: { sent: boolean; mode: string; to?: string };
+    }>('/pos/b2b-invoice-confirm', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
   fetchReceiptHtml: async (orderId: string) => {
     const res = await fetch(`${BASE}/pos/orders/${orderId}/receipt`, {
       headers: headers() as Record<string, string>,
@@ -735,6 +763,59 @@ export const api = {
     }),
   updateB2bPayment: (id: string, body: Record<string, unknown>) =>
     request(`/b2b/orders/${id}/payment`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+
+  listB2bCustomers: (q?: string) =>
+    request(`/b2b/customers${q ? `?q=${encodeURIComponent(q)}` : ''}`),
+  getB2bCustomer: (id: string) => request(`/b2b/customers/${id}`),
+  createB2bCustomer: (body: {
+    name: string;
+    registrationNumber: string;
+    address: string;
+    email: string;
+    phone: string;
+    vatNumber?: string;
+  }) => request('/b2b/customers', { method: 'POST', body: JSON.stringify(body) }),
+  updateB2bCustomer: (
+    id: string,
+    body: {
+      name?: string;
+      registrationNumber?: string;
+      address?: string;
+      email?: string;
+      phone?: string;
+      vatNumber?: string;
+    },
+  ) =>
+    request(`/b2b/customers/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+  deleteB2bCustomer: (id: string) =>
+    request(`/b2b/customers/${id}`, { method: 'DELETE' }),
+
+  listB2bCustomerOrders: (customerId: string) =>
+    request<
+      {
+        _id: string;
+        docNumber: string;
+        businessDate?: string;
+        totalIncVat: number;
+        paymentStatus: 'unpaid' | 'partial' | 'paid';
+        paymentMethod?: string;
+        paidAmount: number;
+        paidAt?: string;
+        createdAt?: string;
+      }[]
+    >(`/b2b/customers/${customerId}/orders`),
+
+  recordB2bInvoicePayment: (
+    orderId: string,
+    body: { paidAt: string; paymentMethod: string; amount: number },
+  ) =>
+    request(`/pos/orders/${orderId}/b2b-payment`, {
       method: 'PATCH',
       body: JSON.stringify(body),
     }),

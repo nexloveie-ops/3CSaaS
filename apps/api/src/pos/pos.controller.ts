@@ -5,6 +5,7 @@ import {
   Headers,
   Logger,
   Param,
+  Patch,
   Post,
   Res,
   UseGuards,
@@ -20,6 +21,8 @@ import { SendEmailDto } from '../common/dto/send-email.dto';
 import { EmailService } from '../notification/email.service';
 import { CreateRefundDto } from './dto/create-refund.dto';
 import { CreateSaleDto } from './dto/create-sale.dto';
+import { PreviewB2bInvoiceDto } from './dto/preview-b2b-invoice.dto';
+import { RecordB2bInvoicePaymentDto } from './dto/record-b2b-invoice-payment.dto';
 import { PosReceiptPdfService } from './pos-receipt-pdf.service';
 import { PosService } from './pos.service';
 
@@ -53,12 +56,96 @@ export class PosController {
   ) {
     const order = await this.posService.createSale(user.userId, companyId, storeId, dto);
     const orderId = order._id.toString();
-    void this.receiptPdf
-      .ensureStored(user.userId, companyId, storeId, orderId)
-      .catch((err) =>
-        this.logger.warn(`Receipt PDF archive failed for ${orderId}: ${(err as Error).message}`),
-      );
+    if (order.docType === 'receipt') {
+      void this.receiptPdf
+        .ensureStored(user.userId, companyId, storeId, orderId)
+        .catch((err) =>
+          this.logger.warn(`Receipt PDF archive failed for ${orderId}: ${(err as Error).message}`),
+        );
+    }
     return order;
+  }
+
+  /** Draft B2B invoice HTML — no order, no stock change. */
+  @Post('b2b-invoice-preview')
+  async previewB2bInvoice(
+    @CurrentUser() user: { userId: string },
+    @Headers('x-company-id') companyId: string,
+    @Headers('x-store-id') storeId: string,
+    @Body() dto: PreviewB2bInvoiceDto,
+    @Res() res: Response,
+  ) {
+    const html = await this.posService.previewB2bInvoice(
+      user.userId,
+      companyId,
+      storeId,
+      dto,
+    );
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(html);
+  }
+
+  /** Confirm draft B2B cart: create invoice sale, deduct stock, email formal PDF. */
+  @Post('b2b-invoice-confirm')
+  async confirmB2bInvoice(
+    @CurrentUser() user: { userId: string },
+    @Headers('x-company-id') companyId: string,
+    @Headers('x-store-id') storeId: string,
+    @Body() dto: PreviewB2bInvoiceDto,
+  ) {
+    const order = await this.posService.createSale(user.userId, companyId, storeId, {
+      lines: dto.lines,
+      b2bCustomerId: dto.b2bCustomerId,
+      paymentMethod: 'other',
+    });
+    const orderId = order._id.toString();
+
+    const [sellerName, buyer, pdf] = await Promise.all([
+      this.posService.getCompanyDisplayName(companyId),
+      this.posService.getB2bCustomer(companyId, dto.b2bCustomerId),
+      this.receiptPdf.getPdfBuffer(user.userId, companyId, storeId, orderId),
+    ]);
+
+    const buyerEmail = buyer?.email;
+    const buyerName = buyer?.name || order.b2bCustomerName || 'Customer';
+    const total = Number(order.totalIncVat).toFixed(2);
+
+    let email: { sent: boolean; mode: string; to?: string } = {
+      sent: false,
+      mode: 'skipped',
+    };
+    if (buyerEmail) {
+      const subject = `${sellerName} Sales Invoice ${order.docNumber}`;
+      const text = [
+        `Dear ${buyerName},`,
+        '',
+        `Please find attached your purchase invoice from ${sellerName}.`,
+        '',
+        `Invoice number: ${order.docNumber}`,
+        `Total payable: €${total}`,
+        '',
+        'Thank you for your business. We look forward to working with you again.',
+        '',
+        'Kind regards,',
+        sellerName,
+      ].join('\n');
+
+      const result = await this.emailService.sendWithPdfAttachment({
+        to: buyerEmail,
+        subject,
+        text,
+        filename: `${order.docNumber}.pdf`,
+        pdf: pdf.buffer,
+      });
+      email = { ...result, to: buyerEmail };
+    }
+
+    return {
+      _id: orderId,
+      docNumber: order.docNumber,
+      totalIncVat: order.totalIncVat,
+      email,
+    };
   }
 
   @Get('orders/:id')
@@ -69,6 +156,16 @@ export class PosController {
     @Param('id') id: string,
   ) {
     return this.posService.getReceiptDetail(user.userId, companyId, storeId, id);
+  }
+
+  @Patch('orders/:id/b2b-payment')
+  recordB2bInvoicePayment(
+    @CurrentUser() user: { userId: string },
+    @Headers('x-company-id') companyId: string,
+    @Param('id') id: string,
+    @Body() dto: RecordB2bInvoicePaymentDto,
+  ) {
+    return this.posService.recordB2bInvoicePayment(user.userId, companyId, id, dto);
   }
 
   @Post('orders/:id/refund')

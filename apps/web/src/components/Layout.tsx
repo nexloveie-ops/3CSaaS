@@ -73,7 +73,11 @@ const NAV_GROUPS: { id: string; labelKey: string; items: NavItem[] }[] = [
     id: 'network',
     labelKey: 'nav.groupNetwork',
     items: [
-      { to: '/dashboard/b2b', key: 'nav.b2b', module: NAV_MODULE_REQUIREMENTS['/dashboard/b2b'] },
+      {
+        to: '/dashboard/b2b-customers',
+        key: 'nav.b2bCustomers',
+        module: NAV_MODULE_REQUIREMENTS['/dashboard/b2b-customers'],
+      },
       { to: '/dashboard/chain', key: 'nav.chain', module: NAV_MODULE_REQUIREMENTS['/dashboard/chain'] },
     ],
   },
@@ -187,6 +191,24 @@ export function Layout() {
       setStoreId(boundStoreId);
     }
   }, [boundStoreId, storeId, setStoreId]);
+
+  useEffect(() => {
+    if (!companyId || !storesFetched || boundStoreId) return;
+    const valid = storeId != null && companyStores.some((s) => s._id === storeId);
+    if (valid) return;
+    if (companyStores.length === 1) {
+      setStoreId(companyStores[0]!._id);
+      return;
+    }
+    if (storeId != null) setStoreId(null);
+  }, [
+    companyId,
+    storesFetched,
+    companyStores,
+    storeId,
+    boundStoreId,
+    setStoreId,
+  ]);
 
   const effectiveRole = useMemo(() => {
     if (!companyId || !memberships?.length) return null;

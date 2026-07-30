@@ -41,6 +41,7 @@ export function DashboardPage() {
   const [companyAddress, setCompanyAddress] = useState('');
   const [companyPhone, setCompanyPhone] = useState('');
   const [companyEmail, setCompanyEmail] = useState('');
+  const [companyBankAccount, setCompanyBankAccount] = useState('');
   const [storeAddress, setStoreAddress] = useState('');
   const [storePhone, setStorePhone] = useState('');
   const [storeEmail, setStoreEmail] = useState('');
@@ -92,6 +93,7 @@ export function DashboardPage() {
       address?: string;
       contactPhone?: string;
       contactEmail?: string;
+      bankAccount?: string;
     };
 
     const resetCompanyForm = () => {
@@ -105,6 +107,7 @@ export function DashboardPage() {
       setCompanyAddress('');
       setCompanyPhone('');
       setCompanyEmail('');
+      setCompanyBankAccount('');
     };
 
     if (!companyId) {
@@ -128,6 +131,7 @@ export function DashboardPage() {
     setCompanyAddress(c.address ?? '');
     setCompanyPhone(c.contactPhone ?? '');
     setCompanyEmail(c.contactEmail ?? '');
+    setCompanyBankAccount(c.bankAccount ?? '');
   }, [companyId, company]);
 
   const { data: selectedStore } = useQuery({
@@ -280,6 +284,7 @@ export function DashboardPage() {
         address: companyAddress || undefined,
         contactPhone: companyPhone || undefined,
         contactEmail: companyEmail || undefined,
+        bankAccount: companyBankAccount || undefined,
       }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['company', companyId] }),
   });
@@ -685,6 +690,16 @@ export function DashboardPage() {
               <label>{t('dashboard.companyAddress')}</label>
               <input value={companyAddress} onChange={(e) => setCompanyAddress(e.target.value)} />
             </div>
+          </div>
+          <div className="form-field">
+            <label>{t('dashboard.bankAccount')}</label>
+            <textarea
+              value={companyBankAccount}
+              onChange={(e) => setCompanyBankAccount(e.target.value)}
+              rows={3}
+              placeholder={t('dashboard.bankAccountPlaceholder')}
+            />
+            <p className="dashboard-card-hint">{t('dashboard.bankAccountHint')}</p>
           </div>
           <button
             type="button"

@@ -42,7 +42,7 @@ export class InvoiceHtmlService {
     VAT: ${escapeHtml(seller.vatNumber || '—')}<br>
     ${escapeHtml(seller.address || '')}<br>
     ${escapeHtml(seller.contactName || '')} ${escapeHtml(seller.contactPhone || '')}<br>
-    Bank: ${escapeHtml(seller.bankAccount || '—')}</p></div>
+    Bank / payment:<br>${escapeHtml(seller.bankAccount || '—').replace(/\n/g, '<br>')}</p></div>
   <div class="party"><h3>Buyer</h3>
     <p>${escapeHtml(buyer.legalName || buyer.name)}<br>
     VAT: ${escapeHtml(buyer.vatNumber || '—')}<br>

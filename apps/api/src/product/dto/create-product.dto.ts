@@ -23,6 +23,11 @@ export class CreateProductDto {
 
   @IsOptional()
   @IsString()
+  @MinLength(1)
+  nameEn?: string;
+
+  @IsOptional()
+  @IsString()
   skuCode?: string;
 
   @IsOptional()

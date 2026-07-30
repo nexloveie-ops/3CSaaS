@@ -5,6 +5,7 @@ import { readPersistedAuth } from './lib/auth-session';
 import { AcceptInvitePage } from './pages/AcceptInvitePage';
 import { AdminPage } from './pages/AdminPage';
 import { AuditPage } from './pages/AuditPage';
+import { B2bCustomersPage } from './pages/B2bCustomersPage';
 import { B2bPage } from './pages/B2bPage';
 import { BillingPage } from './pages/BillingPage';
 import { ChainPage } from './pages/ChainPage';
@@ -56,6 +57,7 @@ export default function App() {
         <Route path="price-list" element={<PriceListPage />} />
         <Route path="preorders" element={<PreordersPage />} />
         <Route path="b2b" element={<B2bPage />} />
+        <Route path="b2b-customers" element={<B2bCustomersPage />} />
         <Route path="warehouse" element={<WarehousePage />} />
         <Route path="chain" element={<ChainPage />} />
         <Route path="transfers" element={<TransfersPage />} />

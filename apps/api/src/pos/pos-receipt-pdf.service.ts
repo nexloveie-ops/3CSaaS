@@ -21,8 +21,9 @@ export class PosReceiptPdfService {
     private companyService: CompanyService,
   ) {}
 
-  private storageKey(companyId: string, orderId: string) {
-    return `receipts/${companyId}/${orderId}.pdf`;
+  private storageKey(companyId: string, orderId: string, docType: string) {
+    const folder = docType === 'invoice_b2b' ? 'invoices' : 'receipts';
+    return `${folder}/${companyId}/${orderId}.pdf`;
   }
 
   async renderPdfBuffer(
@@ -30,8 +31,15 @@ export class PosReceiptPdfService {
     companyId: string,
     storeId: string,
     orderId: string,
+    docType?: string,
   ): Promise<Buffer> {
-    const html = await this.posService.getReceiptHtml(userId, companyId, storeId, orderId);
+    const html = await this.posService.getReceiptHtml(userId, companyId, storeId, orderId, {
+      forPdf: true,
+    });
+    if (docType === 'invoice_b2b') {
+      // A4 formal B2B invoice (not 80mm thermal receipt / not draft preview)
+      return this.pdfBrowser.htmlToPdfBuffer(html);
+    }
     return this.pdfBrowser.htmlToPdfBuffer(html, { width: '80mm' });
   }
 
@@ -46,9 +54,9 @@ export class PosReceiptPdfService {
       _id: orderId,
       companyId: new Types.ObjectId(companyId),
       storeId: new Types.ObjectId(storeId),
-      docType: 'receipt',
+      docType: { $in: ['receipt', 'invoice_b2b'] },
     });
-    if (!order) throw new NotFoundException('Receipt not found');
+    if (!order) throw new NotFoundException('Document not found');
 
     if (order.pdfStorageKey) {
       const existing = await this.storage.read(order.pdfStorageKey);
@@ -57,12 +65,20 @@ export class PosReceiptPdfService {
           storageKey: order.pdfStorageKey,
           generatedAt: order.pdfGeneratedAt,
           cached: true,
+          docNumber: order.docNumber,
+          docType: order.docType,
         };
       }
     }
 
-    const key = this.storageKey(companyId, orderId);
-    const pdf = await this.renderPdfBuffer(userId, companyId, storeId, orderId);
+    const key = this.storageKey(companyId, orderId, order.docType);
+    const pdf = await this.renderPdfBuffer(
+      userId,
+      companyId,
+      storeId,
+      orderId,
+      order.docType,
+    );
     await this.storage.save(key, pdf, 'application/pdf');
 
     order.pdfStorageKey = key;
@@ -75,6 +91,7 @@ export class PosReceiptPdfService {
       cached: false,
       sizeBytes: pdf.length,
       docNumber: order.docNumber,
+      docType: order.docType,
     };
   }
 
@@ -89,21 +106,31 @@ export class PosReceiptPdfService {
       _id: orderId,
       companyId: new Types.ObjectId(companyId),
       storeId: new Types.ObjectId(storeId),
-      docType: 'receipt',
+      docType: { $in: ['receipt', 'invoice_b2b'] },
     });
-    if (!order) throw new NotFoundException('Receipt not found');
+    if (!order) throw new NotFoundException('Document not found');
 
     if (order.pdfStorageKey) {
       const buf = await this.storage.read(order.pdfStorageKey);
       if (buf) {
-        return { buffer: buf, docNumber: order.docNumber, fromCache: true };
+        return {
+          buffer: buf,
+          docNumber: order.docNumber,
+          docType: order.docType,
+          fromCache: true,
+        };
       }
     }
 
     const result = await this.ensureStored(userId, companyId, storeId, orderId);
     const buf = await this.storage.read(result.storageKey);
     if (!buf) throw new ServiceUnavailableException('PDF storage read failed');
-    return { buffer: buf, docNumber: order.docNumber, fromCache: false };
+    return {
+      buffer: buf,
+      docNumber: order.docNumber,
+      docType: order.docType,
+      fromCache: false,
+    };
   }
 
   async getSignedPdfUrl(

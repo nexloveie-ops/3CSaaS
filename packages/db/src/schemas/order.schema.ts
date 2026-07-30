@@ -78,10 +78,25 @@ export class Order {
 
   @Prop({
     required: true,
-    enum: ['cash', 'card', 'mixed', 'other'],
+    enum: ['cash', 'card', 'mixed', 'other', 'bank_transfer'],
     default: 'cash',
   })
   paymentMethod!: string;
+
+  /** B2B invoice settlement status (POS invoice_b2b). */
+  @Prop({
+    enum: ['unpaid', 'partial', 'paid'],
+    default: undefined,
+  })
+  paymentStatus?: string;
+
+  /** When the B2B invoice payment was recorded. */
+  @Prop()
+  paidAt?: Date;
+
+  /** Amount recorded as paid against a B2B invoice. */
+  @Prop({ min: 0 })
+  paidAmount?: number;
 
   /** Cash portion (cash-only or mixed). */
   @Prop({ min: 0, default: 0 })
@@ -101,6 +116,13 @@ export class Order {
 
   @Prop({ type: Types.ObjectId, ref: 'Customer' })
   customerId?: Types.ObjectId;
+
+  /** Wholesale / trade customer (POS B2B sale). */
+  @Prop({ type: Types.ObjectId, ref: 'B2bCustomer', index: true })
+  b2bCustomerId?: Types.ObjectId;
+
+  @Prop({ trim: true })
+  b2bCustomerName?: string;
 
   @Prop({ type: Types.ObjectId, ref: 'User' })
   createdByUserId?: Types.ObjectId;
@@ -129,3 +151,4 @@ export const OrderSchema = SchemaFactory.createForClass(Order);
 OrderSchema.index({ companyId: 1, docNumber: 1 }, { unique: true });
 OrderSchema.index({ storeId: 1, businessDate: 1 });
 OrderSchema.index({ sourceOrderId: 1 });
+OrderSchema.index({ companyId: 1, b2bCustomerId: 1, docType: 1 });

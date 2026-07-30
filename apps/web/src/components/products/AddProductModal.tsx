@@ -22,6 +22,7 @@ export function AddProductModal({ categoryId, categoryName, onClose, onCreated }
   const { t } = useTranslation();
   const qc = useQueryClient();
   const [name, setName] = useState('');
+  const [nameEn, setNameEn] = useState('');
   const [productType, setProductType] = useState('simple');
   const [costPrice, setCostPrice] = useState('0');
   const [retailPrice, setRetailPrice] = useState('');
@@ -50,6 +51,7 @@ export function AddProductModal({ categoryId, categoryName, onClose, onCreated }
         : [];
       const parent = (await api.createProduct({
         name,
+        nameEn: nameEn.trim() || undefined,
         productType,
         catalogCategoryId: categoryId,
         costPrice: Number(costPrice),
@@ -112,6 +114,15 @@ export function AddProductModal({ categoryId, categoryName, onClose, onCreated }
           <label className="form-field preorder-form__full">
             <span>{t('products.productName')}</span>
             <input value={name} onChange={(e) => setName(e.target.value)} required autoFocus />
+          </label>
+          <label className="form-field preorder-form__full">
+            <span>{t('products.productNameEn')}</span>
+            <input
+              value={nameEn}
+              onChange={(e) => setNameEn(e.target.value)}
+              placeholder={t('products.productNameEnPlaceholder')}
+              autoComplete="off"
+            />
           </label>
           <label className="form-field preorder-form__full">
             <span>{t('products.productType')}</span>

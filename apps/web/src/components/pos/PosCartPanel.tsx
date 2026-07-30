@@ -21,6 +21,10 @@ type Props = {
   total: number;
   checkoutDisabled?: boolean;
   checkoutPending?: boolean;
+  showB2bButton?: boolean;
+  b2bCustomerName?: string | null;
+  onOpenB2bPick?: () => void;
+  onClearB2b?: () => void;
   onRemove: (index: number) => void;
   onUpdateQty: (index: number, delta: number) => void;
   onUpdatePrice: (index: number, price: number) => void;
@@ -54,6 +58,10 @@ export function PosCartPanel({
   total,
   checkoutDisabled,
   checkoutPending,
+  showB2bButton,
+  b2bCustomerName,
+  onOpenB2bPick,
+  onClearB2b,
   onRemove,
   onUpdateQty,
   onUpdatePrice,
@@ -66,13 +74,44 @@ export function PosCartPanel({
   return (
     <aside className="pos-cart-panel">
       <header className="pos-cart-panel__header">
-        <h3 className="pos-cart-panel__title">{t('pos.cart')}</h3>
+        <div className="pos-cart-panel__header-main">
+          <h3 className="pos-cart-panel__title">{t('pos.cart')}</h3>
+          {showB2bButton && (
+            <button
+              type="button"
+              className={
+                b2bCustomerName
+                  ? 'btn-sm pos-cart-panel__b2b-btn pos-cart-panel__b2b-btn--active'
+                  : 'btn-secondary btn-sm pos-cart-panel__b2b-btn'
+              }
+              onClick={onOpenB2bPick}
+            >
+              {t('pos.b2b')}
+            </button>
+          )}
+        </div>
         {itemCount > 0 && (
           <span className="pos-cart-panel__count">
             {t('pos.cartItemCount', { count: itemCount })}
           </span>
         )}
       </header>
+
+      {b2bCustomerName && (
+        <div className="pos-cart-panel__b2b-banner">
+          <span>
+            {t('pos.b2bOrderFor')}: <strong>{b2bCustomerName}</strong>
+          </span>
+          <button
+            type="button"
+            className="btn-secondary btn-sm"
+            onClick={onClearB2b}
+            aria-label={t('pos.b2bClear')}
+          >
+            {t('pos.b2bClear')}
+          </button>
+        </div>
+      )}
 
       <div className="pos-cart-panel__body">
         {lines.length === 0 ? (
@@ -186,6 +225,7 @@ export function PosCartPanel({
             total={total}
             disabled={checkoutDisabled}
             pending={checkoutPending}
+            b2bMode={!!b2bCustomerName}
             onSubmit={onCheckout}
           />
           {children}

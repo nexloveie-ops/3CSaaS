@@ -30,4 +30,10 @@ export class UpdateCompanyProfileDto {
   @IsEmail()
   @MaxLength(120)
   contactEmail?: string;
+
+  /** Bank / IBAN details printed on B2B invoices for payment. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  bankAccount?: string;
 }

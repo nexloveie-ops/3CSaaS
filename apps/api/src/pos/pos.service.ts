@@ -2,6 +2,8 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import {
+  B2bCustomer,
+  B2bCustomerDocument,
   Company,
   CompanyDocument,
   Order,
@@ -16,7 +18,7 @@ import {
   WorkOrderDocument,
 } from '@lz3c/db';
 import { canTransition } from '../service/work-order.transitions';
-import { calculateLineTax, TaxScheme } from '@lz3c/shared';
+import { calculateLineTax, TaxScheme, taxSchemeReportLabel } from '@lz3c/shared';
 import { AuditService } from '../common/services/audit.service';
 import { DocumentSequenceService } from '../common/services/document-sequence.service';
 import { CompanyService } from '../company/company.service';
@@ -41,6 +43,8 @@ export class PosService {
     @InjectModel(Store.name) private storeModel: Model<StoreDocument>,
     @InjectModel(Company.name) private companyModel: Model<CompanyDocument>,
     @InjectModel(WorkOrder.name) private woModel: Model<WorkOrderDocument>,
+    @InjectModel(B2bCustomer.name)
+    private b2bCustomerModel: Model<B2bCustomerDocument>,
     private companyService: CompanyService,
     private inventoryService: InventoryService,
     private docSeq: DocumentSequenceService,
@@ -61,11 +65,79 @@ export class PosService {
         _id: orderId,
         companyId: new Types.ObjectId(companyId),
         storeId: new Types.ObjectId(storeId),
-        docType: 'receipt',
+        docType: { $in: ['receipt', 'invoice_b2b'] },
       })
       .lean();
     if (!order) throw new NotFoundException('Receipt not found');
     return order;
+  }
+
+  async recordB2bInvoicePayment(
+    userId: string,
+    companyId: string,
+    orderId: string,
+    dto: { paidAt: string; paymentMethod: string; amount: number },
+  ) {
+    await this.companyService.assertMember(userId, companyId);
+    const order = await this.orderModel.findOne({
+      _id: orderId,
+      companyId: new Types.ObjectId(companyId),
+      docType: 'invoice_b2b',
+      status: 'completed',
+    });
+    if (!order) throw new NotFoundException('B2B invoice not found');
+
+    const currentStatus =
+      order.paymentStatus === 'paid' || order.paymentStatus === 'partial'
+        ? order.paymentStatus
+        : 'unpaid';
+    if (currentStatus === 'paid') {
+      throw new BadRequestException('Invoice is already paid');
+    }
+
+    const amount = Math.round(Number(dto.amount) * 100) / 100;
+    if (!(amount > 0)) {
+      throw new BadRequestException('Payment amount must be greater than zero');
+    }
+
+    const paidAt = new Date(dto.paidAt);
+    if (Number.isNaN(paidAt.getTime())) {
+      throw new BadRequestException('Invalid payment date');
+    }
+
+    const total = Number(order.totalIncVat) || 0;
+    const paymentStatus = amount + 0.001 >= total ? 'paid' : 'partial';
+
+    order.paymentStatus = paymentStatus;
+    order.paymentMethod = dto.paymentMethod;
+    order.paidAmount = amount;
+    order.paidAt = paidAt;
+    await order.save();
+
+    void this.audit.log({
+      companyId,
+      userId,
+      action: 'pos.b2b_payment',
+      entityType: 'order',
+      entityId: order._id.toString(),
+      metadata: {
+        docNumber: order.docNumber,
+        paymentStatus,
+        paymentMethod: dto.paymentMethod,
+        paidAmount: amount,
+        paidAt: paidAt.toISOString(),
+      },
+    });
+
+    return {
+      _id: order._id,
+      docNumber: order.docNumber,
+      totalIncVat: order.totalIncVat,
+      paymentStatus: order.paymentStatus,
+      paymentMethod: order.paymentMethod,
+      paidAmount: order.paidAmount,
+      paidAt: order.paidAt,
+    };
   }
 
   async getReceiptHtml(
@@ -73,8 +145,12 @@ export class PosService {
     companyId: string,
     storeId: string,
     orderId: string,
+    opts?: { forPdf?: boolean },
   ) {
     const order = await this.getOrder(userId, companyId, storeId, orderId);
+    if (order.docType === 'invoice_b2b') {
+      return this.renderB2bInvoiceHtml(companyId, order, { forPdf: opts?.forPdf });
+    }
     const store = await this.storeModel.findById(storeId).lean();
     return this.receiptService.render({
       docNumber: order.docNumber,
@@ -95,6 +171,290 @@ export class PosService {
       })),
       totalIncVat: order.totalIncVat,
       salesTerms: store?.salesTerms,
+    });
+  }
+
+  private async renderB2bInvoiceHtml(
+    companyId: string,
+    order: {
+      docNumber: string;
+      businessDate?: string;
+      totalIncVat: number;
+      totalVat: number;
+      b2bCustomerId?: Types.ObjectId;
+      b2bCustomerName?: string;
+      lines: {
+        productId?: Types.ObjectId;
+        productName: string;
+        quantity: number;
+        unitPriceIncVat: number;
+        lineTotalIncVat: number;
+        taxScheme?: string;
+        costPreTax?: number;
+        sn?: string;
+      }[];
+    },
+    opts?: { forPdf?: boolean },
+  ) {
+    const [company, buyer] = await Promise.all([
+      this.companyModel.findById(companyId).lean(),
+      order.b2bCustomerId
+        ? this.b2bCustomerModel.findById(order.b2bCustomerId).lean()
+        : Promise.resolve(null),
+    ]);
+    if (!company) throw new NotFoundException('Company not found');
+
+    const productIds = order.lines
+      .map((l) => l.productId)
+      .filter((id): id is Types.ObjectId => !!id);
+    const products = productIds.length
+      ? await this.productModel
+          .find({ _id: { $in: productIds }, companyId: new Types.ObjectId(companyId) })
+          .lean()
+      : [];
+    const invoiceNameByProductId = new Map(
+      products.map((p) => [String(p._id), this.invoiceProductName(p)]),
+    );
+
+    const vatByScheme = new Map<string, { label: string; net: number; vat: number }>();
+    let subtotalPreTax = 0;
+    let totalVat = 0;
+    const isPreview = order.docNumber === 'PREVIEW';
+
+    const lines = order.lines.map((l) => {
+      const scheme = (l.taxScheme ?? 'standard_23') as TaxScheme;
+      const tax = calculateLineTax({
+        scheme,
+        salePriceIncVat: l.unitPriceIncVat,
+        costPreTax: l.costPreTax,
+        perspective: 'retail',
+        quantity: l.quantity,
+      });
+      const vatLabel = taxSchemeReportLabel(scheme);
+      subtotalPreTax += tax.netPreTax;
+      totalVat += tax.vatAmount;
+
+      const bucket = vatByScheme.get(scheme) ?? { label: vatLabel, net: 0, vat: 0 };
+      bucket.net += tax.netPreTax;
+      bucket.vat += tax.vatAmount;
+      vatByScheme.set(scheme, bucket);
+
+      const productName =
+        (l.productId && invoiceNameByProductId.get(String(l.productId))) ||
+        this.invoiceProductName({ name: l.productName });
+
+      return {
+        productName,
+        quantity: l.quantity,
+        unitPriceIncVat: l.unitPriceIncVat,
+        lineTotalIncVat: l.lineTotalIncVat,
+        lineNetPreTax: tax.netPreTax,
+        lineVat: tax.vatAmount,
+        vatLabel,
+        sn: l.sn,
+      };
+    });
+
+    return this.receiptService.renderB2bInvoice({
+      docNumber: order.docNumber,
+      businessDate: order.businessDate ?? new Date().toISOString().slice(0, 10),
+      seller: {
+        name: company.name,
+        legalName: company.legalName,
+        vatNumber: company.vatNumber,
+        registrationNumber: company.registrationNumber,
+        address: company.address,
+        contactPhone: company.contactPhone,
+        contactEmail: company.contactEmail,
+        bankAccount: company.bankAccount,
+      },
+      buyer: {
+        name: buyer?.name ?? order.b2bCustomerName ?? 'Customer',
+        registrationNumber: buyer?.registrationNumber,
+        vatNumber: buyer?.vatNumber,
+        address: buyer?.address,
+        phone: buyer?.phone,
+        email: buyer?.email,
+      },
+      lines,
+      vatBreakdown: Array.from(vatByScheme.values()).map((v) => ({
+        label: v.label,
+        net: Math.round(v.net * 100) / 100,
+        vat: Math.round(v.vat * 100) / 100,
+      })),
+      subtotalPreTax: Math.round(subtotalPreTax * 100) / 100,
+      totalIncVat: order.totalIncVat,
+      totalVat: Math.round(totalVat * 100) / 100 || order.totalVat,
+      statusLabel: opts?.forPdf
+        ? undefined
+        : isPreview
+          ? 'Draft preview'
+          : 'Awaiting payment',
+      showConfirmSend: isPreview && !opts?.forPdf,
+      omitToolbar: !!opts?.forPdf,
+    });
+  }
+
+  async getB2bCustomerEmail(companyId: string, b2bCustomerId: string) {
+    const buyer = await this.getB2bCustomer(companyId, b2bCustomerId);
+    return buyer?.email;
+  }
+
+  async getB2bCustomer(companyId: string, b2bCustomerId: string) {
+    const buyer = await this.b2bCustomerModel
+      .findOne({
+        _id: b2bCustomerId,
+        companyId: new Types.ObjectId(companyId),
+      })
+      .lean();
+    if (!buyer) return null;
+    return {
+      name: buyer.name,
+      email: buyer.email?.trim() || undefined,
+    };
+  }
+
+  async getCompanyDisplayName(companyId: string) {
+    const company = await this.companyModel.findById(companyId).lean();
+    if (!company) return 'Company';
+    return (company.legalName || company.name || 'Company').trim();
+  }
+
+  /**
+   * Build B2B invoice HTML from cart lines without creating an order or changing stock.
+   */
+  async previewB2bInvoice(
+    userId: string,
+    companyId: string,
+    storeId: string,
+    dto: { b2bCustomerId: string; lines: {
+      productId?: string;
+      adHocDescription?: string;
+      taxCategoryId?: string;
+      costPreTax?: number;
+      quantity: number;
+      unitPriceIncVat?: number;
+      sn?: string;
+      workOrderId?: string;
+    }[] },
+  ): Promise<string> {
+    await this.companyService.assertStoreAccess(userId, companyId, storeId);
+    if (!dto.lines?.length) {
+      throw new BadRequestException('At least one line required');
+    }
+
+    const buyer = await this.b2bCustomerModel
+      .findOne({
+        _id: dto.b2bCustomerId,
+        companyId: new Types.ObjectId(companyId),
+        isActive: true,
+      })
+      .lean();
+    if (!buyer) {
+      throw new BadRequestException('B2B customer not found');
+    }
+
+    const orderLines: {
+      productId?: Types.ObjectId;
+      productName: string;
+      quantity: number;
+      unitPriceIncVat: number;
+      lineTotalIncVat: number;
+      taxScheme: string;
+      costPreTax?: number;
+      sn?: string;
+    }[] = [];
+    let totalIncVat = 0;
+    let totalVat = 0;
+
+    for (const line of dto.lines) {
+      if (line.adHocDescription?.trim()) {
+        if (!line.taxCategoryId) {
+          throw new BadRequestException('Tax category required for quick sale lines');
+        }
+        const tax = await this.taxModel
+          .findOne({
+            _id: line.taxCategoryId,
+            companyId: new Types.ObjectId(companyId),
+          })
+          .lean();
+        if (!tax) throw new BadRequestException('Tax category missing');
+
+        const unitPrice = line.unitPriceIncVat ?? 0;
+        const lineGross = unitPrice * line.quantity;
+        const taxResult = calculateLineTax({
+          scheme: tax.scheme as TaxScheme,
+          salePriceIncVat: unitPrice,
+          costPreTax: line.costPreTax,
+          perspective: 'retail',
+          quantity: line.quantity,
+        });
+        totalIncVat += lineGross;
+        totalVat += taxResult.vatAmount;
+        orderLines.push({
+          productName: line.adHocDescription.trim(),
+          quantity: line.quantity,
+          unitPriceIncVat: unitPrice,
+          lineTotalIncVat: lineGross,
+          taxScheme: tax.scheme,
+          costPreTax: line.costPreTax,
+          sn: line.sn,
+        });
+        continue;
+      }
+
+      if (!line.productId) {
+        throw new BadRequestException('Each line needs productId or adHocDescription');
+      }
+
+      const product = await this.productModel
+        .findOne({
+          _id: line.productId,
+          companyId: new Types.ObjectId(companyId),
+        })
+        .lean();
+      if (!product) throw new BadRequestException(`Product ${line.productId} not found`);
+
+      const tax = await this.taxModel.findById(product.taxCategoryId).lean();
+      if (!tax) throw new BadRequestException('Tax category missing');
+
+      const unitPrice =
+        line.unitPriceIncVat ?? product.retailPrice ?? product.costPrice;
+      const lineGross = unitPrice * line.quantity;
+      const taxResult = calculateLineTax({
+        scheme: tax.scheme as TaxScheme,
+        salePriceIncVat: unitPrice,
+        costPreTax: product.costPrice,
+        perspective: 'retail',
+        quantity: line.quantity,
+      });
+
+      const lineLabel = line.workOrderId
+        ? await this.workOrderLineName(line.workOrderId, this.invoiceProductName(product))
+        : this.invoiceProductName(product);
+
+      totalIncVat += lineGross;
+      totalVat += taxResult.vatAmount;
+      orderLines.push({
+        productId: product._id,
+        productName: lineLabel,
+        quantity: line.quantity,
+        unitPriceIncVat: unitPrice,
+        lineTotalIncVat: lineGross,
+        taxScheme: tax.scheme,
+        costPreTax: product.costPrice,
+        sn: line.sn,
+      });
+    }
+
+    return this.renderB2bInvoiceHtml(companyId, {
+      docNumber: 'PREVIEW',
+      businessDate: new Date().toISOString().slice(0, 10),
+      totalIncVat: Math.round(totalIncVat * 100) / 100,
+      totalVat: Math.round(totalVat * 100) / 100,
+      b2bCustomerId: buyer._id,
+      b2bCustomerName: buyer.name,
+      lines: orderLines,
     });
   }
 
@@ -332,7 +692,24 @@ export class PosService {
       throw new BadRequestException('At least one line required');
     }
 
-    const docNumber = await this.docSeq.next(companyId, 'receipt');
+    let b2bCustomer: { _id: Types.ObjectId; name: string } | null = null;
+    if (dto.b2bCustomerId) {
+      const found = await this.b2bCustomerModel
+        .findOne({
+          _id: dto.b2bCustomerId,
+          companyId: new Types.ObjectId(companyId),
+          isActive: true,
+        })
+        .lean();
+      if (!found) {
+        throw new BadRequestException('B2B customer not found');
+      }
+      b2bCustomer = { _id: found._id, name: found.name };
+    }
+
+    const isB2b = !!b2bCustomer;
+    const docType = isB2b ? 'invoice_b2b' : 'receipt';
+    const docNumber = await this.docSeq.next(companyId, docType);
     const businessDate = new Date().toISOString().slice(0, 10);
     const orderLines = [];
     let subtotalIncVat = 0;
@@ -453,9 +830,12 @@ export class PosService {
         );
       }
 
-      const lineLabel = line.workOrderId
-        ? await this.workOrderLineName(line.workOrderId, product.name)
+      const catalogName = isB2b
+        ? this.invoiceProductName(product)
         : product.name;
+      const lineLabel = line.workOrderId
+        ? await this.workOrderLineName(line.workOrderId, catalogName)
+        : catalogName;
 
       orderLines.push({
         productId: product._id,
@@ -475,13 +855,20 @@ export class PosService {
       });
     }
 
-    const payment = resolveSalePayment(dto, subtotalIncVat);
+    const payment = isB2b
+      ? {
+          paymentMethod: 'other',
+          cashAmount: 0,
+          cardAmount: 0,
+          paymentMethodLabel: formatPaymentMethodLabel('other'),
+        }
+      : resolveSalePayment(dto, subtotalIncVat);
 
     const order = await this.orderModel.create({
       companyId: new Types.ObjectId(companyId),
       storeId: new Types.ObjectId(storeId),
       docNumber,
-      docType: 'receipt',
+      docType,
       status: 'completed',
       lines: orderLines,
       subtotalIncVat,
@@ -492,9 +879,12 @@ export class PosService {
       cardAmount: payment.cardAmount,
       amountTendered: payment.amountTendered,
       changeGiven: payment.changeGiven,
+      ...(isB2b ? { paymentStatus: 'unpaid', paidAmount: 0 } : {}),
       customerId: dto.customerId
         ? new Types.ObjectId(dto.customerId)
         : undefined,
+      b2bCustomerId: b2bCustomer?._id,
+      b2bCustomerName: b2bCustomer?.name,
       createdByUserId: new Types.ObjectId(userId),
       businessDate,
     });
@@ -518,15 +908,35 @@ export class PosService {
       entityId: order._id.toString(),
       metadata: {
         docNumber,
+        docType,
         totalIncVat: order.totalIncVat,
         paymentMethod: order.paymentMethod,
         cashAmount: order.cashAmount,
         cardAmount: order.cardAmount,
         workOrderIds: [...workOrderIds],
+        b2bCustomerId: b2bCustomer?._id.toString(),
+        b2bCustomerName: b2bCustomer?.name,
       },
     });
 
     return order;
+  }
+
+  /** English label for B2B invoices — never return Chinese characters. */
+  private invoiceProductName(product: {
+    name: string;
+    nameEn?: string;
+    skuCode?: string;
+    _id?: { toString(): string };
+  }) {
+    const cjk = /[\u3400-\u9FFF]/;
+    const en = product.nameEn?.trim();
+    if (en && !cjk.test(en)) return en;
+    if (!cjk.test(product.name)) return product.name;
+    const latinOnly = product.name.replace(cjk, ' ').replace(/\s+/g, ' ').trim();
+    if (latinOnly) return latinOnly;
+    if (product.skuCode?.trim()) return `Item ${product.skuCode.trim()}`;
+    return product._id ? `Product ${product._id.toString().slice(-6)}` : 'Product';
   }
 
   private async workOrderLineName(workOrderId: string, fallback: string) {

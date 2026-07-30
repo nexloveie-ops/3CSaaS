@@ -81,7 +81,8 @@ export function formatPaymentMethodLabel(method: string): string {
   if (method === 'cash') return 'Cash';
   if (method === 'card') return 'Card';
   if (method === 'mixed') return 'Mixed';
-  if (method === 'other') return 'Other';
+  if (method === 'other') return 'Invoice (awaiting payment)';
+  if (method === 'bank_transfer') return 'Bank transfer';
   return method;
 }
 
@@ -112,6 +113,9 @@ export function buildReceiptPaymentLines(order: {
       `Cash: €${(order.cashAmount ?? 0).toFixed(2)}`,
       `Card: €${(order.cardAmount ?? 0).toFixed(2)}`,
     ];
+  }
+  if (order.paymentMethod === 'other' || order.paymentMethod === 'bank_transfer') {
+    return ['Payment: Invoice — awaiting bank transfer'];
   }
   return [`Payment: ${formatPaymentMethodLabel(order.paymentMethod)}`];
 }

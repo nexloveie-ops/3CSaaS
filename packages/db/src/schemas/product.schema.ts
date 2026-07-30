@@ -17,6 +17,10 @@ export class Product {
   @Prop({ required: true, trim: true })
   name!: string;
 
+  /** English name for B2B invoices / export (optional). */
+  @Prop({ trim: true })
+  nameEn?: string;
+
   @Prop({ trim: true })
   skuCode?: string;
 

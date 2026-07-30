@@ -2383,11 +2383,40 @@ pre.code-block {
   background: #fff;
 }
 
+.pos-cart-panel__header-main {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
 .pos-cart-panel__title {
   margin: 0;
   font-size: 1rem;
   font-weight: 600;
   letter-spacing: -0.01em;
+}
+
+.pos-cart-panel__b2b-btn {
+  flex-shrink: 0;
+}
+
+.pos-cart-panel__b2b-btn--active {
+  background: var(--pos-tiffany);
+  border-color: var(--pos-tiffany);
+  color: #fff;
+}
+
+.pos-cart-panel__b2b-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.55rem 1.125rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--pos-tiffany-soft);
+  font-size: 0.8125rem;
+  color: var(--text);
 }
 
 .pos-cart-panel__count {
@@ -3105,6 +3134,14 @@ button.pos-modal-close:active:not(:disabled) {
   cursor: not-allowed;
   background: #ffffff;
   color: #000000;
+}
+
+.pos-b2b-pick-item__main {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  min-width: 0;
 }
 
 .pos-modal--variant-pick {

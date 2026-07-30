@@ -1,11 +1,40 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import nodemailer from 'nodemailer';
 
 @Injectable()
 export class EmailService {
   private readonly logger = new Logger(EmailService.name);
 
   constructor(private config: ConfigService) {}
+
+  private fromAddress() {
+    return (
+      this.config.get<string>('EMAIL_FROM')?.trim() ||
+      this.config.get<string>('SMTP_FROM')?.trim() ||
+      'info@lztechserve.com'
+    );
+  }
+
+  private smtpConfigured() {
+    return !!(
+      this.config.get<string>('SMTP_USER')?.trim() &&
+      this.config.get<string>('SMTP_PASS')?.trim()
+    );
+  }
+
+  private createSmtpTransport() {
+    const host = this.config.get<string>('SMTP_HOST') ?? 'smtp.gmail.com';
+    const port = Number(this.config.get('SMTP_PORT') ?? 587);
+    const user = this.config.get<string>('SMTP_USER')!.trim();
+    const pass = this.config.get<string>('SMTP_PASS')!.trim();
+    return nodemailer.createTransport({
+      host,
+      port,
+      secure: port === 465,
+      auth: { user, pass },
+    });
+  }
 
   async sendWithPdfAttachment(opts: {
     to: string;
@@ -20,9 +49,32 @@ export class EmailService {
       return { sent: false, mode: 'skipped' };
     }
 
-    const sendgridKey = this.config.get('SENDGRID_API_KEY');
-    const from = this.config.get('EMAIL_FROM') ?? 'noreply@lz3c.local';
+    const from = this.fromAddress();
 
+    if (this.smtpConfigured()) {
+      try {
+        const transport = this.createSmtpTransport();
+        await transport.sendMail({
+          from,
+          to,
+          subject: opts.subject,
+          text: opts.text,
+          attachments: [
+            {
+              filename: opts.filename,
+              content: opts.pdf,
+              contentType: 'application/pdf',
+            },
+          ],
+        });
+        return { sent: true, mode: 'smtp' };
+      } catch (err) {
+        this.logger.error(`SMTP send failed: ${(err as Error).message}`);
+        return { sent: false, mode: 'smtp_error' };
+      }
+    }
+
+    const sendgridKey = this.config.get('SENDGRID_API_KEY');
     if (sendgridKey) {
       const body = {
         personalizations: [{ to: [{ email: to }] }],
@@ -71,9 +123,26 @@ export class EmailService {
     const to = opts.to.trim().toLowerCase();
     if (!to) return { sent: false, mode: 'skipped' };
 
-    const sendgridKey = this.config.get('SENDGRID_API_KEY');
-    const from = this.config.get('EMAIL_FROM') ?? 'noreply@lz3c.local';
+    const from = this.fromAddress();
 
+    if (this.smtpConfigured()) {
+      try {
+        const transport = this.createSmtpTransport();
+        await transport.sendMail({
+          from,
+          to,
+          subject: opts.subject,
+          text: opts.text,
+          html: opts.html,
+        });
+        return { sent: true, mode: 'smtp' };
+      } catch (err) {
+        this.logger.error(`SMTP send failed: ${(err as Error).message}`);
+        return { sent: false, mode: 'smtp_error' };
+      }
+    }
+
+    const sendgridKey = this.config.get('SENDGRID_API_KEY');
     if (sendgridKey) {
       const res = await fetch('https://api.sendgrid.com/v3/mail/send', {
         method: 'POST',

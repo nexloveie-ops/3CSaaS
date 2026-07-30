@@ -28,6 +28,7 @@ export const NAV_MODULE_REQUIREMENTS: Record<string, ModuleId> = {
   '/dashboard/price-list': 'service',
   '/dashboard/preorders': 'preorder',
   '/dashboard/b2b': 'b2b',
+  '/dashboard/b2b-customers': 'b2b',
   '/dashboard/warehouse': 'warehouse',
   '/dashboard/chain': 'chain',
   '/dashboard/transfers': 'inventory',

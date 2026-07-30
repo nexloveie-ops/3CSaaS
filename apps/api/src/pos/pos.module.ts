@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import {
+  B2bCustomer,
+  B2bCustomerSchema,
   Company,
   CompanySchema,
   Order,
@@ -36,6 +38,7 @@ import { PosService } from './pos.service';
       { name: Store.name, schema: StoreSchema },
       { name: Company.name, schema: CompanySchema },
       { name: WorkOrder.name, schema: WorkOrderSchema },
+      { name: B2bCustomer.name, schema: B2bCustomerSchema },
     ]),
   ],
   controllers: [PosController],

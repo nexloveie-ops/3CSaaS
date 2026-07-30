@@ -82,8 +82,9 @@ export function ReceivingPanel({ onSuccess, onError }: Props) {
   const cats = (categories as { _id: string; name: string }[] | undefined) ?? [];
 
   const { data: positions } = useQuery({
-    queryKey: ['inventory'],
+    queryKey: ['inventory', storeId],
     queryFn: () => api.listInventory(),
+    enabled: !!storeId,
   });
 
   const searchTerm = search.trim();

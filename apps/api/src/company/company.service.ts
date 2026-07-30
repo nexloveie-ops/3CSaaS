@@ -440,6 +440,9 @@ export class CompanyService {
     if (dto.contactEmail !== undefined) {
       company.contactEmail = dto.contactEmail.trim() || undefined;
     }
+    if (dto.bankAccount !== undefined) {
+      company.bankAccount = dto.bankAccount.trim() || undefined;
+    }
     await company.save();
     return company;
   }

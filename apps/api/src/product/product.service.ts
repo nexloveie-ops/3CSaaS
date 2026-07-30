@@ -10,6 +10,8 @@ import {
   InventoryPositionDocument,
   Product,
   ProductDocument,
+  SerialUnit,
+  SerialUnitDocument,
   StoreProductSetting,
   StoreProductSettingDocument,
   TaxCategory,
@@ -32,6 +34,7 @@ export class ProductService {
     @InjectModel(Product.name) private productModel: Model<ProductDocument>,
     @InjectModel(InventoryPosition.name)
     private positionModel: Model<InventoryPositionDocument>,
+    @InjectModel(SerialUnit.name) private serialModel: Model<SerialUnitDocument>,
     @InjectModel(StoreProductSetting.name)
     private storeProductSettingModel: Model<StoreProductSettingDocument>,
     @InjectModel(TaxCategory.name)
@@ -95,7 +98,7 @@ export class ProductService {
       .filter((p) => p.variantDimensions?.length)
       .map((p) => p._id);
     if (!parentIds.length) {
-      return this.attachPosSalable(products, storeId);
+      return this.attachPosStoreMeta(products, companyId, storeId);
     }
 
     const children = await this.productModel
@@ -125,29 +128,124 @@ export class ProductService {
       if (!range) return p;
       return { ...p, variantPriceMin: range.min, variantPriceMax: range.max };
     });
-    return this.attachPosSalable(withRanges, storeId);
+    return this.attachPosStoreMeta(withRanges, companyId, storeId);
   }
 
-  private async attachPosSalable<T extends { _id: Types.ObjectId }>(
+  private async attachPosStoreMeta<
+    T extends {
+      _id: Types.ObjectId;
+      productType?: string;
+      variantDimensions?: { name: string; values: string[] }[];
+    },
+  >(
     rows: T[],
+    companyId: string,
     storeId?: string,
-  ): Promise<(T & { posSalable: boolean })[]> {
+  ): Promise<(T & { posSalable: boolean; quantity: number })[]> {
     if (!storeId || !rows.length) {
-      return rows.map((p) => ({ ...p, posSalable: true }));
+      return rows.map((p) => ({ ...p, posSalable: true, quantity: 0 }));
     }
+
+    const companyOid = new Types.ObjectId(companyId);
+    const storeOid = new Types.ObjectId(storeId);
+    const rowIds = rows.map((p) => p._id);
+
     const settings = await this.storeProductSettingModel
       .find({
-        storeId: new Types.ObjectId(storeId),
-        productId: { $in: rows.map((p) => p._id) },
+        storeId: storeOid,
+        productId: { $in: rowIds },
       })
       .lean();
-    const byProduct = new Map(
+    const salableByProduct = new Map(
       settings.map((s) => [s.productId.toString(), s.posSalable !== false]),
     );
-    return rows.map((p) => ({
-      ...p,
-      posSalable: byProduct.get(String(p._id)) ?? true,
-    }));
+
+    const variantParents = rows.filter((p) => (p.variantDimensions?.length ?? 0) > 0);
+    const variantParentIds = variantParents.map((p) => p._id);
+    const children =
+      variantParentIds.length > 0
+        ? await this.productModel
+            .find({
+              companyId: companyOid,
+              parentProductId: { $in: variantParentIds },
+              isActive: true,
+            })
+            .select('_id parentProductId')
+            .lean()
+        : [];
+
+    const childIdsByParent = new Map<string, Types.ObjectId[]>();
+    for (const child of children) {
+      const pid = String(child.parentProductId);
+      const list = childIdsByParent.get(pid) ?? [];
+      list.push(child._id);
+      childIdsByParent.set(pid, list);
+    }
+
+    const leafIds: Types.ObjectId[] = [];
+    for (const p of rows) {
+      const childIds = childIdsByParent.get(String(p._id));
+      if (childIds?.length) leafIds.push(...childIds);
+      else if (p.productType !== 'serialized') leafIds.push(p._id);
+    }
+
+    const positions =
+      leafIds.length > 0
+        ? await this.positionModel
+            .find({
+              companyId: companyOid,
+              storeId: storeOid,
+              productId: { $in: leafIds },
+            })
+            .lean()
+        : [];
+    const qtyByProduct = new Map(
+      positions.map((p) => [p.productId.toString(), p.quantity]),
+    );
+
+    const serializedIds = rows
+      .filter((p) => p.productType === 'serialized')
+      .map((p) => p._id);
+    const serialCounts =
+      serializedIds.length > 0
+        ? await this.serialModel.aggregate<{ _id: Types.ObjectId; count: number }>([
+            {
+              $match: {
+                companyId: companyOid,
+                currentStoreId: storeOid,
+                productId: { $in: serializedIds },
+                status: 'in_stock',
+              },
+            },
+            { $group: { _id: '$productId', count: { $sum: 1 } } },
+          ])
+        : [];
+    const serialQtyByProduct = new Map(
+      serialCounts.map((row) => [row._id.toString(), row.count]),
+    );
+
+    return rows.map((p) => {
+      const id = String(p._id);
+      let quantity = 0;
+      if (p.productType === 'serialized') {
+        quantity = serialQtyByProduct.get(id) ?? 0;
+      } else {
+        const childIds = childIdsByParent.get(id);
+        if (childIds?.length) {
+          quantity = childIds.reduce(
+            (sum, cid) => sum + (qtyByProduct.get(cid.toString()) ?? 0),
+            0,
+          );
+        } else {
+          quantity = qtyByProduct.get(id) ?? 0;
+        }
+      }
+      return {
+        ...p,
+        posSalable: salableByProduct.get(id) ?? true,
+        quantity,
+      };
+    });
   }
 
   async getOne(userId: string, companyId: string, id: string) {

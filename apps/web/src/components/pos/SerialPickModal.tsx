@@ -9,6 +9,7 @@ export type PosProduct = {
   productType: string;
   retailPrice?: number;
   costPrice: number;
+  quantity?: number;
   posSalable?: boolean;
   variantDimensions?: { name: string; values: string[] }[];
   variantPriceMin?: number;
