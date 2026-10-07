@@ -19,7 +19,9 @@ export function QuickNewProductModal({ defaultCategoryId, onClose, onConfirm }: 
   const [skuCode, setSkuCode] = useState('');
   const [catalogCategoryId, setCatalogCategoryId] = useState(defaultCategoryId ?? '');
   const [costPrice, setCostPrice] = useState('0');
+  const [wholesalePrice, setWholesalePrice] = useState('');
   const [retailPrice, setRetailPrice] = useState('');
+  const [barcode, setBarcode] = useState('');
   const [error, setError] = useState('');
 
   const { data: categories } = useQuery({
@@ -54,7 +56,9 @@ export function QuickNewProductModal({ defaultCategoryId, onClose, onConfirm }: 
       costPrice: Number(costPrice) || 0,
       catalogCategoryId: catalogCategoryId || undefined,
       retailPrice: retailPrice ? Number(retailPrice) : undefined,
+      wholesalePrice: wholesalePrice.trim() === '' ? undefined : Number(wholesalePrice),
       skuCode: productType === 'sku' ? skuCode.trim() : undefined,
+      barcode: productType === 'sku' ? barcode.trim() || undefined : undefined,
     });
   }
 
@@ -88,15 +92,25 @@ export function QuickNewProductModal({ defaultCategoryId, onClose, onConfirm }: 
             </select>
           </label>
           {productType === 'sku' && (
-            <label className="form-field preorder-form__full">
-              <span>{t('inventory.skuCode')} *</span>
-              <input
-                value={skuCode}
-                onChange={(e) => setSkuCode(e.target.value)}
-                required
-                autoComplete="off"
-              />
-            </label>
+            <>
+              <label className="form-field preorder-form__full">
+                <span>{t('inventory.skuCode')} *</span>
+                <input
+                  value={skuCode}
+                  onChange={(e) => setSkuCode(e.target.value)}
+                  required
+                  autoComplete="off"
+                />
+              </label>
+              <label className="form-field preorder-form__full">
+                <span>{t('products.barcode')}</span>
+                <input
+                  value={barcode}
+                  onChange={(e) => setBarcode(e.target.value)}
+                  autoComplete="off"
+                />
+              </label>
+            </>
           )}
           <label className="form-field preorder-form__full">
             <span>{t('products.catalogCategory')}</span>
@@ -121,6 +135,16 @@ export function QuickNewProductModal({ defaultCategoryId, onClose, onConfirm }: 
                 step="0.01"
                 value={costPrice}
                 onChange={(e) => setCostPrice(e.target.value)}
+              />
+            </label>
+            <label className="form-field">
+              <span>{t('products.wholesalePrice')}</span>
+              <input
+                type="number"
+                min={0}
+                step="0.01"
+                value={wholesalePrice}
+                onChange={(e) => setWholesalePrice(e.target.value)}
               />
             </label>
             <label className="form-field">

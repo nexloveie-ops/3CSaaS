@@ -32,6 +32,8 @@ import {
   orderNetRevenue,
   resolveSalePayment,
 } from './payment.util';
+import { FeiePrintService } from '../printing/feie-print.service';
+import { renderSaleTicket } from '../printing/tickets';
 import { PosReceiptService } from './pos-receipt.service';
 
 @Injectable()
@@ -49,6 +51,7 @@ export class PosService {
     private inventoryService: InventoryService,
     private docSeq: DocumentSequenceService,
     private receiptService: PosReceiptService,
+    private feie: FeiePrintService,
     private audit: AuditService,
     private reportService: ReportService,
   ) {}
@@ -174,6 +177,32 @@ export class PosService {
     });
   }
 
+  /** Retail receipt only. Repair failures never reach this path. */
+  async printFeie(userId: string, companyId: string, storeId: string, orderId: string) {
+    const order = await this.getOrder(userId, companyId, storeId, orderId);
+    if (order.docType !== 'receipt') {
+      throw new BadRequestException('Only retail receipts can be sent to the Feie printer');
+    }
+    const store = await this.storeModel.findById(storeId).lean();
+    const content = renderSaleTicket({
+      storeName: store?.name ?? 'Store',
+      storeAddress: store?.address,
+      storePhone: store?.phone,
+      docNumber: order.docNumber,
+      businessDate: order.businessDate ?? new Date().toISOString().slice(0, 10),
+      lines: order.lines.map((l) => ({
+        productName: l.productName,
+        quantity: l.quantity,
+        lineTotalIncVat: l.lineTotalIncVat,
+        sn: l.sn,
+      })),
+      totalIncVat: order.totalIncVat,
+      paymentLines: buildReceiptPaymentLines(order),
+      salesTerms: store?.salesTerms,
+    });
+    return this.feie.print(companyId, storeId, content);
+  }
+
   private async renderB2bInvoiceHtml(
     companyId: string,
     order: {
@@ -223,13 +252,20 @@ export class PosService {
 
     const lines = order.lines.map((l) => {
       const scheme = (l.taxScheme ?? 'standard_23') as TaxScheme;
-      const tax = calculateLineTax({
-        scheme,
-        salePriceIncVat: l.unitPriceIncVat,
-        costPreTax: l.costPreTax,
-        perspective: 'retail',
-        quantity: l.quantity,
-      });
+      const lineGross = l.lineTotalIncVat ?? l.unitPriceIncVat * l.quantity;
+      const tax =
+        scheme === 'margin_23'
+          ? {
+              netPreTax: Math.round(lineGross * 100) / 100,
+              vatAmount: 0,
+              gross: Math.round(lineGross * 100) / 100,
+            }
+          : calculateLineTax({
+              scheme,
+              salePriceIncVat: l.unitPriceIncVat,
+              perspective: 'retail',
+              quantity: l.quantity,
+            });
       const vatLabel = taxSchemeReportLabel(scheme);
       subtotalPreTax += tax.netPreTax;
       totalVat += tax.vatAmount;
@@ -284,7 +320,7 @@ export class PosService {
       })),
       subtotalPreTax: Math.round(subtotalPreTax * 100) / 100,
       totalIncVat: order.totalIncVat,
-      totalVat: Math.round(totalVat * 100) / 100 || order.totalVat,
+      totalVat: Math.round(totalVat * 100) / 100,
       statusLabel: opts?.forPdf
         ? undefined
         : isPreview
@@ -458,6 +494,111 @@ export class PosService {
     });
   }
 
+  async searchReceipts(
+    userId: string,
+    companyId: string,
+    storeId: string,
+    query: { from?: string; to?: string; q?: string },
+  ) {
+    await this.companyService.assertStoreAccess(userId, companyId, storeId);
+    const from = query.from?.trim() ?? '';
+    const to = query.to?.trim() ?? '';
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || from > to) {
+      throw new BadRequestException('Choose a valid date range');
+    }
+    const span = (Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86400000;
+    if (span > 366) throw new BadRequestException('Date range cannot exceed 366 days');
+
+    const company = new Types.ObjectId(companyId);
+    const store = new Types.ObjectId(storeId);
+    const filter: Record<string, unknown> = {
+      companyId: company,
+      storeId: store,
+      docType: 'receipt',
+      status: 'completed',
+      businessDate: { $gte: from, $lte: to },
+    };
+
+    const term = query.q?.trim() ?? '';
+    if (term) {
+      const rx = new RegExp(escapeRegex(term), 'i');
+      const or: Record<string, unknown>[] = [
+        { docNumber: rx },
+        { b2bCustomerName: rx },
+        { 'lines.productName': rx },
+        { 'lines.sn': rx },
+      ];
+      const products = await this.productModel
+        .find({ companyId: company, barcode: rx })
+        .select('_id')
+        .limit(50)
+        .lean();
+      if (products.length) {
+        or.push({ 'lines.productId': { $in: products.map((p) => p._id) } });
+      }
+      const workOrders = await this.woModel
+        .find({
+          companyId: company,
+          $or: [
+            { customerName: rx },
+            { customerPhone: rx },
+            { imeiSn: rx },
+            { serialSn: rx },
+            { docNumber: rx },
+          ],
+        })
+        .select('_id')
+        .limit(200)
+        .lean();
+      if (workOrders.length) {
+        or.push({ 'lines.workOrderId': { $in: workOrders.map((w) => w._id) } });
+      }
+      filter.$or = or;
+    }
+
+    const orders = await this.orderModel
+      .find(filter)
+      .sort({ businessDate: -1, createdAt: -1 })
+      .limit(80)
+      .lean();
+
+    const ids = orders.map((o) => o._id);
+    const [notes, workOrders] = await Promise.all([
+      ids.length
+        ? this.orderModel
+            .find({ sourceOrderId: { $in: ids }, docType: 'credit_note' })
+            .select('sourceOrderId totalIncVat')
+            .lean()
+        : [],
+      this.workOrdersFor(orders),
+    ]);
+    const refundedByOrder = new Map<string, number>();
+    for (const note of notes) {
+      const key = String(note.sourceOrderId);
+      refundedByOrder.set(key, round2((refundedByOrder.get(key) ?? 0) + note.totalIncVat));
+    }
+
+    return orders.map((o) => {
+      const refunded = refundedByOrder.get(String(o._id)) ?? 0;
+      const customer = this.customerFor(o, workOrders);
+      return {
+        _id: String(o._id),
+        docNumber: o.docNumber,
+        businessDate: o.businessDate,
+        totalIncVat: o.totalIncVat,
+        refundedTotalIncVat: refunded,
+        refundableAmount: round2(Math.max(0, o.totalIncVat - refunded)),
+        refundStatus: lineRefundStatus(o.lines),
+        paymentMethod: o.paymentMethod,
+        customerName: customer.name,
+        customerPhone: customer.phone,
+        summary: o.lines
+          .map((line) => (line.sn ? `${line.productName} ${line.sn}` : line.productName))
+          .join(', '),
+      };
+    });
+  }
+
   async listToday(
     userId: string,
     companyId: string,
@@ -505,13 +646,15 @@ export class PosService {
     const lines = order.lines.map((line, index) => {
       const refunded = line.refundedQuantity ?? 0;
       const refundable = line.quantity - refunded;
+      const unit = line.quantity > 0 ? line.lineTotalIncVat / line.quantity : 0;
       return {
         lineIndex: index,
-        productId: String(line.productId),
+        productId: line.productId ? String(line.productId) : undefined,
         productName: line.productName,
         quantity: line.quantity,
         refundedQuantity: refunded,
         refundableQuantity: refundable,
+        refundableAmount: round2(Math.max(0, unit * refundable)),
         unitPriceIncVat: line.unitPriceIncVat,
         lineTotalIncVat: line.lineTotalIncVat,
         sn: line.sn,
@@ -519,10 +662,17 @@ export class PosService {
       };
     });
 
+    const refundedMoney = round2(creditNotes.reduce((sum, cn) => sum + cn.totalIncVat, 0));
+    const customer = this.customerFor(order, await this.workOrdersFor([order]));
+
     return {
       ...order,
-      netTotalIncVat: orderNetRevenue(order),
-      refundedTotalIncVat: round2(order.totalIncVat - orderNetRevenue(order)),
+      netTotalIncVat: round2(Math.max(0, order.totalIncVat - refundedMoney)),
+      refundedTotalIncVat: refundedMoney,
+      refundableAmount: round2(Math.max(0, order.totalIncVat - refundedMoney)),
+      refundStatus: lineRefundStatus(order.lines),
+      customerName: customer.name,
+      customerPhone: customer.phone,
       lines,
       creditNotes: creditNotes.map((cn) => ({
         _id: String(cn._id),
@@ -540,6 +690,17 @@ export class PosService {
     orderId: string,
     dto: CreateRefundDto,
   ): Promise<Record<string, unknown>> {
+    if (dto.amount != null) {
+      return this.refundByAmount(
+        userId,
+        companyId,
+        storeId,
+        orderId,
+        dto.amount,
+        dto.paymentMethod,
+        dto.lineIndexes ?? [],
+      );
+    }
     await this.companyService.assertStoreAccess(userId, companyId, storeId);
     const order = await this.orderModel.findOne({
       _id: orderId,
@@ -549,6 +710,7 @@ export class PosService {
       status: 'completed',
     });
     if (!order) throw new NotFoundException('Receipt not found');
+    if (!dto.lines?.length) throw new BadRequestException('Refund lines or amount required');
 
     const refundLines: {
       index: number;
@@ -557,7 +719,7 @@ export class PosService {
       refundAmount: number;
     }[] = [];
 
-    for (const req of dto.lines) {
+    for (const req of dto.lines ?? []) {
       const line = order.lines[req.lineIndex];
       if (!line) {
         throw new BadRequestException(`Invalid line index ${req.lineIndex}`);
@@ -583,6 +745,12 @@ export class PosService {
     );
     if (refundTotal <= 0) {
       throw new BadRequestException('Refund total must be positive');
+    }
+    const remainingMoney = await this.remainingRefundable(order._id, order.totalIncVat);
+    if (refundTotal - remainingMoney > 0.001) {
+      throw new BadRequestException(
+        `Refund exceeds the remaining €${remainingMoney.toFixed(2)}`,
+      );
     }
 
     const gross = order.totalIncVat;
@@ -679,6 +847,207 @@ export class PosService {
         totalIncVat: creditNote.totalIncVat,
       },
     };
+  }
+
+  private async refundByAmount(
+    userId: string,
+    companyId: string,
+    storeId: string,
+    orderId: string,
+    rawAmount: number,
+    paymentMethod: string | undefined,
+    lineIndexes: number[],
+  ): Promise<Record<string, unknown>> {
+    await this.companyService.assertStoreAccess(userId, companyId, storeId);
+    if (paymentMethod !== 'cash' && paymentMethod !== 'card') {
+      throw new BadRequestException('Choose cash or card');
+    }
+    const order = await this.orderModel.findOne({
+      _id: orderId,
+      companyId: new Types.ObjectId(companyId),
+      storeId: new Types.ObjectId(storeId),
+      docType: 'receipt',
+      status: 'completed',
+    });
+    if (!order) throw new NotFoundException('Receipt not found');
+    if (!lineIndexes.length) throw new BadRequestException('Select at least one product');
+
+    const seen = new Set<number>();
+    const selected: {
+      index: number;
+      line: (typeof order.lines)[0];
+      qty: number;
+      remaining: number;
+    }[] = [];
+    for (const index of lineIndexes) {
+      if (seen.has(index)) continue;
+      seen.add(index);
+      const line = order.lines[index];
+      if (!line) throw new BadRequestException(`Invalid line index ${index}`);
+      const already = line.refundedQuantity ?? 0;
+      const qty = line.quantity - already;
+      if (qty <= 0) {
+        throw new BadRequestException(`${line.productName} has already been refunded`);
+      }
+      const unit = line.quantity > 0 ? line.lineTotalIncVat / line.quantity : 0;
+      selected.push({ index, line, qty, remaining: round2(unit * qty) });
+    }
+
+    const amount = round2(rawAmount);
+    const selectedTotal = round2(selected.reduce((sum, row) => sum + row.remaining, 0));
+    const remaining = await this.remainingRefundable(order._id, order.totalIncVat);
+    const cap = round2(Math.min(selectedTotal, remaining));
+    if (amount - cap > 0.001) {
+      throw new BadRequestException(`Refund exceeds the selected €${cap.toFixed(2)}`);
+    }
+    const today = new Date().toISOString().slice(0, 10);
+    const creditLines = this.creditLinesForSelection(selected, amount);
+
+    for (const row of selected) {
+      order.lines[row.index].refundedQuantity = order.lines[row.index].quantity;
+      const product = row.line.productId
+        ? await this.productModel.findById(row.line.productId)
+        : null;
+      if (product && product.productType !== 'service') {
+        await this.inventoryService.restoreStock(
+          companyId,
+          storeId,
+          String(row.line.productId),
+          row.qty,
+          row.line.serialUnitId ? String(row.line.serialUnitId) : undefined,
+          userId,
+        );
+      }
+      if (row.line.workOrderId) {
+        const wo = await this.woModel.findById(row.line.workOrderId);
+        if (wo && wo.status === 'completed') {
+          wo.status = 'awaiting_payment';
+          wo.paymentOrderId = undefined;
+          await wo.save();
+        }
+      }
+    }
+    order.markModified('lines');
+    await order.save();
+
+    const cnNumber = await this.docSeq.next(companyId, 'credit_note');
+    const creditNote = await this.orderModel.create({
+      companyId: new Types.ObjectId(companyId),
+      storeId: new Types.ObjectId(storeId),
+      docNumber: cnNumber,
+      docType: 'credit_note',
+      status: 'completed',
+      sourceOrderId: order._id,
+      lines: creditLines,
+      subtotalIncVat: amount,
+      totalVat: 0,
+      totalIncVat: amount,
+      paymentMethod,
+      cashAmount: paymentMethod === 'cash' ? amount : 0,
+      cardAmount: paymentMethod === 'card' ? amount : 0,
+      businessDate: today,
+      createdByUserId: new Types.ObjectId(userId),
+    });
+
+    void this.reportService.regenerate(userId, companyId, storeId, today);
+    void this.audit.log({
+      companyId,
+      userId,
+      storeId,
+      action: 'pos.refund',
+      entityType: 'order',
+      entityId: order._id.toString(),
+      metadata: {
+        receipt: order.docNumber,
+        creditNote: cnNumber,
+        refundTotal: amount,
+        paymentMethod,
+        businessDate: today,
+      },
+    });
+
+    return {
+      receipt: await this.getReceiptDetail(userId, companyId, storeId, orderId),
+      creditNote: {
+        _id: String(creditNote._id),
+        docNumber: creditNote.docNumber,
+        totalIncVat: creditNote.totalIncVat,
+      },
+    };
+  }
+
+  private creditLinesForSelection(
+    selected: {
+      line: OrderDocument['lines'][number];
+      qty: number;
+      remaining: number;
+    }[],
+    amount: number,
+  ) {
+    const base = selected.reduce((sum, row) => sum + row.remaining, 0);
+    let left = amount;
+    return selected
+      .map((row, index) => {
+        const share =
+          index === selected.length - 1 || base <= 0
+            ? left
+            : round2((amount * row.remaining) / base);
+        left = round2(left - share);
+        return {
+          productId: row.line.productId,
+          productName: row.line.productName,
+          quantity: row.qty,
+          unitPriceIncVat: row.qty > 0 ? round2(share / row.qty) : share,
+          taxScheme: row.line.taxScheme,
+          costPreTax: row.line.costPreTax,
+          serialUnitId: row.line.serialUnitId,
+          sn: row.line.sn,
+          lineTotalIncVat: share,
+          refundedQuantity: 0,
+          workOrderId: row.line.workOrderId,
+        };
+      })
+      .filter((line) => line.lineTotalIncVat > 0);
+  }
+
+  private async remainingRefundable(orderId: Types.ObjectId, totalIncVat: number) {
+    const notes = await this.orderModel
+      .find({ sourceOrderId: orderId, docType: 'credit_note', status: 'completed' })
+      .select('totalIncVat')
+      .lean();
+    const refunded = round2(notes.reduce((sum, note) => sum + note.totalIncVat, 0));
+    return round2(Math.max(0, totalIncVat - refunded));
+  }
+
+  private async workOrdersFor(
+    orders: { lines: { workOrderId?: Types.ObjectId | null }[] }[],
+  ) {
+    const ids = orders.flatMap((order) =>
+      order.lines.map((line) => line.workOrderId).filter((id): id is Types.ObjectId => !!id),
+    );
+    if (!ids.length) return new Map<string, { customerName?: string; customerPhone?: string }>();
+    const rows = await this.woModel
+      .find({ _id: { $in: ids } })
+      .select('customerName customerPhone')
+      .lean();
+    return new Map(rows.map((row) => [String(row._id), row]));
+  }
+
+  private customerFor(
+    order: {
+      b2bCustomerName?: string;
+      lines: { workOrderId?: Types.ObjectId | null }[];
+    },
+    workOrders: Map<string, { customerName?: string; customerPhone?: string }>,
+  ) {
+    for (const line of order.lines) {
+      if (!line.workOrderId) continue;
+      const wo = workOrders.get(String(line.workOrderId));
+      if (wo?.customerName || wo?.customerPhone) {
+        return { name: wo.customerName, phone: wo.customerPhone };
+      }
+    }
+    return { name: order.b2bCustomerName, phone: undefined as string | undefined };
   }
 
   async createSale(
@@ -973,4 +1342,16 @@ export class PosService {
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
+}
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function lineRefundStatus(lines: { quantity: number; refundedQuantity?: number }[]): string {
+  if (!lines.length) return 'open';
+  const open = lines.filter((line) => line.quantity - (line.refundedQuantity ?? 0) > 0).length;
+  if (open === 0) return 'refunded';
+  if (open === lines.length) return 'open';
+  return 'partial';
 }

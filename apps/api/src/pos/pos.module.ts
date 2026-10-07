@@ -19,6 +19,7 @@ import {
 import { CommonModule } from '../common/common.module';
 import { CompanyModule } from '../company/company.module';
 import { InventoryModule } from '../inventory/inventory.module';
+import { PrintingModule } from '../printing/printing.module';
 import { ReportModule } from '../report/report.module';
 import { PosController } from './pos.controller';
 import { PosReceiptPdfService } from './pos-receipt-pdf.service';
@@ -30,6 +31,7 @@ import { PosService } from './pos.service';
     CommonModule,
     CompanyModule,
     InventoryModule,
+    PrintingModule,
     ReportModule,
     MongooseModule.forFeature([
       { name: Order.name, schema: OrderSchema },

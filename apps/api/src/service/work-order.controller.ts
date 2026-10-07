@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -7,10 +8,11 @@ import {
   Patch,
   Post,
   Query,
+  Req,
   Res,
   UseGuards,
 } from '@nestjs/common';
-import { Response } from 'express';
+import { Request, Response } from 'express';
 import { AuthGuard } from '@nestjs/passport';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { RequireModule } from '../common/decorators/require-module.decorator';
@@ -47,6 +49,16 @@ export class WorkOrderController {
     return this.service.listPayableForPos(user.userId, companyId, storeId);
   }
 
+  @Post(':id/feie-print')
+  printFeie(
+    @CurrentUser() user: { userId: string },
+    @Headers('x-company-id') companyId: string,
+    @Headers('x-store-id') storeId: string,
+    @Param('id') id: string,
+  ) {
+    return this.service.printFeie(user.userId, companyId, storeId, id);
+  }
+
   @Get(':id/receipt')
   async receipt(
     @CurrentUser() user: { userId: string },
@@ -66,6 +78,34 @@ export class WorkOrderController {
     );
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.send(html);
+  }
+
+  @Post(':id/photos')
+  addPhoto(
+    @CurrentUser() user: { userId: string },
+    @Headers('x-company-id') companyId: string,
+    @Param('id') id: string,
+    @Req() req: Request,
+  ) {
+    const body = req.body;
+    if (!Buffer.isBuffer(body)) {
+      throw new BadRequestException('Send the photo as image/jpeg');
+    }
+    return this.service.addPhoto(user.userId, companyId, id, body);
+  }
+
+  @Get(':id/photos/:photoId')
+  async photo(
+    @CurrentUser() user: { userId: string },
+    @Headers('x-company-id') companyId: string,
+    @Param('id') id: string,
+    @Param('photoId') photoId: string,
+    @Res() res: Response,
+  ) {
+    const file = await this.service.readPhoto(user.userId, companyId, id, photoId);
+    res.setHeader('Content-Type', 'image/jpeg');
+    res.setHeader('Cache-Control', 'private, max-age=86400');
+    res.end(file);
   }
 
   @Get(':id')

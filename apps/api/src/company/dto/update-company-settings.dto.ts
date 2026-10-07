@@ -20,4 +20,16 @@ export class UpdateCompanySettingsDto {
   @IsString()
   @MaxLength(500)
   inviteEmailNoteZh?: string;
+
+  /** Feie cloud print username. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  feieUser?: string;
+
+  /** Feie developer UKEY. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  feieUkey?: string;
 }

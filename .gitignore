@@ -12,4 +12,7 @@ data/
 .docker-ci-test/
 .idea/
 .vscode/*
+xcuserdata/
+*.xcuserstate
+DerivedData/
 !.vscode/extensions.json

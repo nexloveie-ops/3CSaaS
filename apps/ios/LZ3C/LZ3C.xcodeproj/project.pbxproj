@@ -1,0 +1,331 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		B10000000000000000000001 /* LZ3CApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000001 /* LZ3CApp.swift */; };
+		B10000000000000000000002 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000002 /* AppModel.swift */; };
+		B10000000000000000000003 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000003 /* APIClient.swift */; };
+		B10000000000000000000004 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000004 /* Models.swift */; };
+		B10000000000000000000005 /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000005 /* LoginView.swift */; };
+		B10000000000000000000006 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000006 /* RootView.swift */; };
+		B10000000000000000000007 /* RepairsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000007 /* RepairsView.swift */; };
+		B10000000000000000000008 /* SellView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000008 /* SellView.swift */; };
+		B10000000000000000000009 /* TapToPay.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000009 /* TapToPay.swift */; };
+		B1000000000000000000000F /* L10n.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000000000000000000000F /* L10n.swift */; };
+		B10000000000000000000010 /* ShopTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000010 /* ShopTheme.swift */; };
+		B10000000000000000000011 /* BarcodeScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000011 /* BarcodeScanner.swift */; };
+		B10000000000000000000012 /* SkuFillView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000012 /* SkuFillView.swift */; };
+		B10000000000000000000013 /* BuyInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000013 /* BuyInView.swift */; };
+		B10000000000000000000014 /* RefundView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000014 /* RefundView.swift */; };
+		B1000000000000000000000A /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F1000000000000000000000A /* Assets.xcassets */; };
+		B1000000000000000000000B /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = F1000000000000000000000B /* PrivacyInfo.xcprivacy */; };
+		B1000000000000000000000C /* StripeTerminal in Frameworks */ = {isa = PBXBuildFile; productRef = D10000000000000000000001 /* StripeTerminal */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		F10000000000000000000001 /* LZ3CApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LZ3CApp.swift; sourceTree = "<group>"; };
+		F10000000000000000000002 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
+		F10000000000000000000003 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
+		F10000000000000000000004 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		F10000000000000000000005 /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
+		F10000000000000000000006 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		F10000000000000000000007 /* RepairsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RepairsView.swift; sourceTree = "<group>"; };
+		F10000000000000000000008 /* SellView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SellView.swift; sourceTree = "<group>"; };
+		F10000000000000000000009 /* TapToPay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TapToPay.swift; sourceTree = "<group>"; };
+		F1000000000000000000000F /* L10n.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = L10n.swift; sourceTree = "<group>"; };
+		F10000000000000000000010 /* ShopTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShopTheme.swift; sourceTree = "<group>"; };
+		F10000000000000000000011 /* BarcodeScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BarcodeScanner.swift; sourceTree = "<group>"; };
+		F10000000000000000000012 /* SkuFillView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkuFillView.swift; sourceTree = "<group>"; };
+		F10000000000000000000013 /* BuyInView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuyInView.swift; sourceTree = "<group>"; };
+		F10000000000000000000014 /* RefundView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RefundView.swift; sourceTree = "<group>"; };
+		F1000000000000000000000A /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		F1000000000000000000000B /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		F1000000000000000000000C /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		F1000000000000000000000E /* LZ3C.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = LZ3C.entitlements; sourceTree = "<group>"; };
+		F1000000000000000000000D /* LZ3C.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LZ3C.app; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		A10000000000000000000002 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B1000000000000000000000C /* StripeTerminal in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		G10000000000000000000001 = {
+			isa = PBXGroup;
+			children = (
+				G10000000000000000000002 /* LZ3C */,
+				G10000000000000000000003 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		G10000000000000000000002 /* LZ3C */ = {
+			isa = PBXGroup;
+			children = (
+				F10000000000000000000001 /* LZ3CApp.swift */,
+				F10000000000000000000002 /* AppModel.swift */,
+				F10000000000000000000003 /* APIClient.swift */,
+				F10000000000000000000004 /* Models.swift */,
+				F10000000000000000000005 /* LoginView.swift */,
+				F10000000000000000000006 /* RootView.swift */,
+				F10000000000000000000007 /* RepairsView.swift */,
+				F10000000000000000000008 /* SellView.swift */,
+				F10000000000000000000009 /* TapToPay.swift */,
+				F1000000000000000000000F /* L10n.swift */,
+				F10000000000000000000010 /* ShopTheme.swift */,
+				F10000000000000000000011 /* BarcodeScanner.swift */,
+				F10000000000000000000012 /* SkuFillView.swift */,
+				F10000000000000000000013 /* BuyInView.swift */,
+				F10000000000000000000014 /* RefundView.swift */,
+				F1000000000000000000000A /* Assets.xcassets */,
+				F1000000000000000000000B /* PrivacyInfo.xcprivacy */,
+				F1000000000000000000000C /* Info.plist */,
+				F1000000000000000000000E /* LZ3C.entitlements */,
+			);
+			path = LZ3C;
+			sourceTree = "<group>";
+		};
+		G10000000000000000000003 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				F1000000000000000000000D /* LZ3C.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		T10000000000000000000001 /* LZ3C */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C10000000000000000000002 /* Build configuration list for PBXNativeTarget "LZ3C" */;
+			buildPhases = (
+				A10000000000000000000001 /* Sources */,
+				A10000000000000000000002 /* Frameworks */,
+				A10000000000000000000003 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = LZ3C;
+			packageProductDependencies = (
+				D10000000000000000000001 /* StripeTerminal */,
+			);
+			productName = LZ3C;
+			productReference = F1000000000000000000000D /* LZ3C.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		P10000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+					T10000000000000000000001 = {
+						CreatedOnToolsVersion = 16.0;
+					};
+				};
+			};
+			buildConfigurationList = C10000000000000000000001 /* Build configuration list for PBXProject "LZ3C" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = "zh-Hans";
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+				"zh-Hans",
+			);
+			mainGroup = G10000000000000000000001;
+			packageReferences = (
+				R10000000000000000000001 /* XCRemoteSwiftPackageReference "stripe-terminal-ios" */,
+			);
+			productRefGroup = G10000000000000000000003 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				T10000000000000000000001 /* LZ3C */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		A10000000000000000000003 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B1000000000000000000000A /* Assets.xcassets in Resources */,
+				B1000000000000000000000B /* PrivacyInfo.xcprivacy in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		A10000000000000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B10000000000000000000001 /* LZ3CApp.swift in Sources */,
+				B10000000000000000000002 /* AppModel.swift in Sources */,
+				B10000000000000000000003 /* APIClient.swift in Sources */,
+				B10000000000000000000004 /* Models.swift in Sources */,
+				B10000000000000000000005 /* LoginView.swift in Sources */,
+				B10000000000000000000006 /* RootView.swift in Sources */,
+				B10000000000000000000007 /* RepairsView.swift in Sources */,
+				B10000000000000000000008 /* SellView.swift in Sources */,
+				B10000000000000000000009 /* TapToPay.swift in Sources */,
+				B1000000000000000000000F /* L10n.swift in Sources */,
+				B10000000000000000000010 /* ShopTheme.swift in Sources */,
+				B10000000000000000000011 /* BarcodeScanner.swift in Sources */,
+				B10000000000000000000012 /* SkuFillView.swift in Sources */,
+				B10000000000000000000013 /* BuyInView.swift in Sources */,
+				B10000000000000000000014 /* RefundView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		E10000000000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.4;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		E10000000000000000000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.4;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		E10000000000000000000003 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = LZ3C/LZ3C.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = WGSRJF8YW5;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = LZ3C/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.lz3c.pos;
+				PRODUCT_NAME = LZ3C;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		E10000000000000000000004 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = LZ3C/LZ3C.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = WGSRJF8YW5;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = LZ3C/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.lz3c.pos;
+				PRODUCT_NAME = LZ3C;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		C10000000000000000000001 /* Build configuration list for PBXProject "LZ3C" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E10000000000000000000001 /* Debug */,
+				E10000000000000000000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		C10000000000000000000002 /* Build configuration list for PBXNativeTarget "LZ3C" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E10000000000000000000003 /* Debug */,
+				E10000000000000000000004 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		R10000000000000000000001 /* XCRemoteSwiftPackageReference "stripe-terminal-ios" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/stripe/stripe-terminal-ios";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 5.1.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		D10000000000000000000001 /* StripeTerminal */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = R10000000000000000000001 /* XCRemoteSwiftPackageReference "stripe-terminal-ios" */;
+			productName = StripeTerminal;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = P10000000000000000000001 /* Project object */;
+}

@@ -14,7 +14,9 @@ export type InboundNewProductPayload = {
   costPrice: number;
   catalogCategoryId?: string;
   retailPrice?: number;
+  wholesalePrice?: number;
   skuCode?: string;
+  barcode?: string;
 };
 
 export type ReceivingCartLine = {

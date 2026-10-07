@@ -50,6 +50,7 @@ export class ProductService {
     catalogCategoryId?: string,
     q?: string,
     storeId?: string,
+    missingBarcode?: string,
   ) {
     await this.companyService.assertMember(userId, companyId);
     const companyOid = new Types.ObjectId(companyId);
@@ -65,6 +66,15 @@ export class ProductService {
     if (catalogCategoryId) {
       filter.catalogCategoryId = new Types.ObjectId(catalogCategoryId);
     }
+    if (missingBarcode === '1' || missingBarcode === 'true') {
+      filter.productType = 'sku';
+      const parentScope = filter.$or;
+      delete filter.$or;
+      filter.$and = [
+        { $or: parentScope },
+        { barcode: { $not: /\S/ } },
+      ];
+    }
     const term = q?.trim();
     if (term) {
       const rx = new RegExp(escapeRegex(term), 'i');
@@ -72,7 +82,7 @@ export class ProductService {
         .find({
           companyId: companyOid,
           isActive: true,
-          $or: [{ name: rx }, { skuCode: rx }],
+          $or: [{ name: rx }, { skuCode: rx }, { barcode: rx }],
         })
         .select('_id parentProductId')
         .lean();
@@ -80,6 +90,26 @@ export class ProductService {
       for (const m of matches) {
         if (m.parentProductId) parentIds.add(String(m.parentProductId));
         else parentIds.add(String(m._id));
+      }
+      const exactSn: Record<string, unknown> = {
+        companyId: companyOid,
+        status: 'in_stock',
+        sn: new RegExp(`^${escapeRegex(term)}$`, 'i'),
+      };
+      const partialSn: Record<string, unknown> = {
+        companyId: companyOid,
+        status: 'in_stock',
+        sn: rx,
+      };
+      if (storeId && Types.ObjectId.isValid(storeId)) {
+        partialSn.currentStoreId = new Types.ObjectId(storeId);
+      }
+      const serialHits = await this.serialModel
+        .find({ $or: [exactSn, partialSn] })
+        .select('productId')
+        .lean();
+      for (const unit of serialHits) {
+        if (unit.productId) parentIds.add(String(unit.productId));
       }
       if (!parentIds.size) {
         return [];
@@ -418,6 +448,7 @@ export class ProductService {
               variantValues: line.variantValues,
               costPrice: line.costPrice,
               retailPrice: line.retailPrice,
+              wholesalePrice: line.wholesalePrice,
               skuCode: line.skuCode,
               isActive: true,
             },
@@ -435,6 +466,7 @@ export class ProductService {
           taxCategoryId: parent.taxCategoryId,
           costPrice: line.costPrice,
           retailPrice: line.retailPrice,
+          wholesalePrice: line.wholesalePrice,
           skuCode: line.skuCode,
           isActive: true,
         });
@@ -479,8 +511,11 @@ export class ProductService {
       );
       catalogCategoryId = new Types.ObjectId(dto.catalogCategoryId);
     }
+    const barcode =
+      dto.productType === 'sku' ? dto.barcode?.trim() || undefined : undefined;
     return this.productModel.create({
       ...dto,
+      barcode,
       companyId: new Types.ObjectId(companyId),
       taxCategoryId: new Types.ObjectId(dto.taxCategoryId),
       catalogCategoryId,
@@ -521,6 +556,19 @@ export class ProductService {
       );
     }
     const update: Record<string, unknown> = { ...dto };
+    const unset: Record<string, 1> = {};
+    if (dto.barcode !== undefined) {
+      if (current.productType === 'sku' && dto.barcode.trim()) {
+        update.barcode = dto.barcode.trim();
+      } else {
+        delete update.barcode;
+        if (current.productType === 'sku') unset.barcode = 1;
+      }
+    }
+    if (dto.wholesalePrice === null) {
+      delete update.wholesalePrice;
+      unset.wholesalePrice = 1;
+    }
     if (dto.taxCategoryId) {
       update.taxCategoryId = new Types.ObjectId(dto.taxCategoryId);
     }
@@ -531,7 +579,10 @@ export class ProductService {
     }
     const doc = await this.productModel.findOneAndUpdate(
       { _id: id, companyId: new Types.ObjectId(companyId) },
-      { $set: update },
+      {
+        $set: update,
+        ...(Object.keys(unset).length ? { $unset: unset } : {}),
+      },
       { new: true },
     );
     if (!doc) throw new NotFoundException('Product not found');

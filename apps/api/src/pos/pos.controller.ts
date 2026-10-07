@@ -7,6 +7,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   Res,
   UseGuards,
 } from '@nestjs/common';
@@ -37,6 +38,22 @@ export class PosController {
     private receiptPdf: PosReceiptPdfService,
     private emailService: EmailService,
   ) {}
+
+  @Get('orders/search')
+  searchOrders(
+    @CurrentUser() user: { userId: string },
+    @Headers('x-company-id') companyId: string,
+    @Headers('x-store-id') storeId: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('q') q?: string,
+  ) {
+    return this.posService.searchReceipts(user.userId, companyId, storeId, {
+      from,
+      to,
+      q,
+    });
+  }
 
   @Get('orders/today')
   listToday(
@@ -177,6 +194,16 @@ export class PosController {
     @Body() dto: CreateRefundDto,
   ) {
     return this.posService.createRefund(user.userId, companyId, storeId, id, dto);
+  }
+
+  @Post('orders/:id/feie-print')
+  printFeie(
+    @CurrentUser() user: { userId: string },
+    @Headers('x-company-id') companyId: string,
+    @Headers('x-store-id') storeId: string,
+    @Param('id') id: string,
+  ) {
+    return this.posService.printFeie(user.userId, companyId, storeId, id);
   }
 
   @Get('orders/:id/receipt')

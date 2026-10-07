@@ -517,7 +517,9 @@ export class InventoryService {
       costPrice: np.costPrice,
       catalogCategoryId: np.catalogCategoryId,
       retailPrice: np.retailPrice,
+      wholesalePrice: np.wholesalePrice,
       skuCode: np.skuCode,
+      barcode: np.barcode,
     });
     return created._id.toString();
   }

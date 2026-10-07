@@ -24,6 +24,10 @@ export class Product {
   @Prop({ trim: true })
   skuCode?: string;
 
+  /** Scannable barcode. Only used on SKU products. */
+  @Prop({ trim: true })
+  barcode?: string;
+
   @Prop({ trim: true })
   category?: string;
 

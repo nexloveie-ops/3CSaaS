@@ -18,6 +18,7 @@ export * from './schemas/price-list-model.schema';
 export * from './schemas/price-list-issue-template.schema';
 export * from './schemas/price-list-item.schema';
 export * from './schemas/work-order.schema';
+export * from './schemas/buy-in.schema';
 export * from './schemas/preorder.schema';
 export * from './schemas/b2b-order.schema';
 export * from './schemas/b2b-customer.schema';

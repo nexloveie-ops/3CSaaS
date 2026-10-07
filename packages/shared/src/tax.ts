@@ -65,12 +65,9 @@ export function calculateLineTax(input: TaxLineInput): TaxLineResult {
   }
 
   if (p === 'b2b_seller') {
-    const vat = round2(((wholesale - cost) * 23) / 123);
-    return {
-      netPreTax: round2(wholesale),
-      vatAmount: vat,
-      gross: round2(wholesale + vat),
-    };
+    // Margin-scheme goods are invoiced at the wholesale amount. Do not
+    // derive VAT from cost, and do not add a VAT line.
+    return { netPreTax: round2(wholesale), vatAmount: 0, gross: round2(wholesale) };
   }
 
   const gross = (input.salePriceIncVat ?? 0) * qty;

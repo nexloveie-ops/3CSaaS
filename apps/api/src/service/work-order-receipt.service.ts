@@ -22,6 +22,7 @@ export interface WorkOrderReceiptInput {
   expectedCompletion?: string;
   repairTerms?: string;
   notes?: string;
+  photoDataUrls?: string[];
 }
 
 @Injectable()
@@ -56,9 +57,18 @@ export class WorkOrderReceiptService {
       .map((x) => `<div class="line">${esc(x)}</div>`)
       .join('');
 
-    const notesBlock = c.notes?.trim()
-      ? `<div class="section"><div class="line"><strong>Notes</strong></div><div class="terms">${esc(c.notes)}</div></div>`
-      : '';
+    const photos = (c.photoDataUrls ?? [])
+      .map(
+        (src) =>
+          `<img src="${src}" alt="" style="width:120px;height:120px;object-fit:cover;margin:4px 4px 0 0" />`,
+      )
+      .join('');
+    const notesBlock =
+      c.notes?.trim() || photos
+        ? `<div class="section"><div class="line"><strong>Notes</strong></div>${
+            c.notes?.trim() ? `<div class="terms">${esc(c.notes)}</div>` : ''
+          }${photos}</div>`
+        : '';
 
     const terms = c.repairTerms?.trim()
       ? `<div class="section"><div class="line"><strong>Terms &amp; conditions</strong></div><div class="terms">${esc(c.repairTerms)}</div></div>`

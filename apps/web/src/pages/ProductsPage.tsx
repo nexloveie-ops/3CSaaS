@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { AddProductModal } from '../components/products/AddProductModal';
 import { EditProductModal, type ProductEditRow } from '../components/products/EditProductModal';
 import { ProductVariantEditor } from '../components/products/ProductVariantEditor';
+import { SkuBarcodeFill } from '../components/products/SkuBarcodeFill';
 import { PageHeader } from '../components/ui/PageHeader';
 import { api } from '../lib/api';
 
@@ -52,6 +53,12 @@ function ProductCard({
     <button type="button" className="pos-product-tile" onClick={() => onEdit(p)}>
       <span className="pos-product-name">{p.name}</span>
       <span className="pos-product-meta">{productTypeLabel(p.productType, t)}</span>
+      {p.barcode && <span className="pos-product-meta">{p.barcode}</span>}
+      {p.wholesalePrice != null && (
+        <span className="pos-product-meta">
+          {t('products.wholesalePrice')} €{p.wholesalePrice.toFixed(2)}
+        </span>
+      )}
       {p.productType === 'serialized' && <span className="badge">{t('pos.serializedBadge')}</span>}
       {hasVariants && <span className="badge">{t('pos.variantBadge')}</span>}
       <span className="pos-product-price">{priceLabel}</span>
@@ -72,6 +79,7 @@ export function ProductsPage() {
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [addProductOpen, setAddProductOpen] = useState(false);
+  const [fillOpen, setFillOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<ProductRow | null>(null);
   const [variantEditor, setVariantEditor] = useState<{
     id: string;
@@ -181,8 +189,19 @@ export function ProductsPage() {
 
   return (
     <div className="page-content">
-      <PageHeader title={t('products.title')} />
+      <PageHeader
+        title={fillOpen ? t('products.fillBarcodeTitle') : t('products.title')}
+        actions={
+          <button type="button" className="btn btn-secondary" onClick={() => setFillOpen((open) => !open)}>
+            {fillOpen ? t('products.fillBarcodeBack') : t('products.fillBarcode')}
+          </button>
+        }
+      />
 
+      {fillOpen && <SkuBarcodeFill />}
+
+      {!fillOpen && (
+      <>
       <details className="section-card collapsible-section">
         <summary>{t('products.categoriesTitle')}</summary>
         <p style={{ marginTop: '0.75rem', opacity: 0.85, fontSize: '0.875rem' }}>
@@ -416,6 +435,8 @@ export function ProductsPage() {
           )}
         </section>
       </div>
+      </>
+      )}
 
       {addProductOpen && selectedCategory && selectedCategoryId && (
         <AddProductModal

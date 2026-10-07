@@ -25,6 +25,7 @@ import {
 import { CommonModule } from '../common/common.module';
 import { CompanyModule } from '../company/company.module';
 import { NotificationModule } from '../notification/notification.module';
+import { PrintingModule } from '../printing/printing.module';
 import { PriceListController } from './price-list.controller';
 import { PriceListService } from './price-list.service';
 import { WorkOrderController } from './work-order.controller';
@@ -36,6 +37,7 @@ import { WorkOrderService } from './work-order.service';
     CommonModule,
     CompanyModule,
     NotificationModule,
+    PrintingModule,
     MongooseModule.forFeature([
       { name: PriceListBrand.name, schema: PriceListBrandSchema },
       { name: PriceListModel.name, schema: PriceListModelSchema },

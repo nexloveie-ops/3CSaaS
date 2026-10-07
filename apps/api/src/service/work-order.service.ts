@@ -1,3 +1,6 @@
+import { randomBytes } from 'crypto';
+import { mkdir, readFile, writeFile } from 'fs/promises';
+import { join, resolve, sep } from 'path';
 import {
   BadRequestException,
   Injectable,
@@ -22,10 +25,12 @@ import {
   WorkOrder,
   WorkOrderDocument,
 } from '@lz3c/db';
-import { formatPriceListLabel } from './price-list.service';
+import { formatPriceListLabel, PriceListService } from './price-list.service';
 import { DocumentSequenceService } from '../common/services/document-sequence.service';
 import { CompanyService } from '../company/company.service';
 import { SmsService } from '../notification/sms.service';
+import { FeiePrintService } from '../printing/feie-print.service';
+import { renderRepairTickets } from '../printing/tickets';
 import { CreateWorkOrderDto } from './dto/create-work-order.dto';
 import { TransitionWorkOrderDto } from './dto/transition-work-order.dto';
 import { UpdateWorkOrderDto } from './dto/update-work-order.dto';
@@ -46,9 +51,11 @@ export class WorkOrderService {
     @InjectModel(Product.name) private productModel: Model<ProductDocument>,
     @InjectModel(TaxCategory.name) private taxModel: Model<TaxCategoryDocument>,
     private companyService: CompanyService,
+    private priceList: PriceListService,
     private docSeq: DocumentSequenceService,
     private sms: SmsService,
     private receiptService: WorkOrderReceiptService,
+    private feie: FeiePrintService,
   ) {}
 
   async list(
@@ -185,7 +192,49 @@ export class WorkOrderService {
       expectedCompletion,
       repairTerms: isCustomer ? store.repairTerms : undefined,
       notes: isCustomer ? undefined : wo.notes,
+      photoDataUrls: isCustomer ? undefined : await this.photoDataUrls(wo),
     });
+  }
+
+  /** Prints the customer copy and the shop copy on the store's Feie printer. */
+  async printFeie(userId: string, companyId: string, storeId: string, id: string) {
+    await this.companyService.assertStoreAccess(userId, companyId, storeId);
+    const wo = await this.woModel
+      .findOne({
+        _id: id,
+        companyId: new Types.ObjectId(companyId),
+        storeId: new Types.ObjectId(storeId),
+      })
+      .lean();
+    if (!wo) throw new NotFoundException('Work order not found');
+    const store = await this.storeModel.findById(storeId).lean();
+    if (!store) throw new NotFoundException('Store not found');
+    const printedAt = new Date().toLocaleString('en-IE', {
+      dateStyle: 'short',
+      timeStyle: 'short',
+    });
+    const content = renderRepairTickets({
+      storeName: store.name,
+      storeAddress: store.address,
+      storePhone: store.phone,
+      docNumber: wo.docNumber,
+      printedAt,
+      customerPhone: wo.customerPhone ?? '',
+      customerName: wo.customerName,
+      deviceBrand: wo.deviceBrand,
+      deviceModel: wo.deviceModel,
+      imeiSn: wo.imeiSn ?? wo.serialSn,
+      issueDescription: wo.issueDescription,
+      priceIncVat: wo.quotedPriceIncVat,
+      repairLocation: wo.repairLocation,
+      expectedCompletion: wo.expectedCompletionAt
+        ? new Date(wo.expectedCompletionAt).toLocaleDateString('en-IE')
+        : undefined,
+      repairTerms: store.repairTerms,
+      notes: wo.notes,
+      photoCount: wo.photoIds?.length ?? 0,
+    });
+    return this.feie.print(companyId, storeId, content);
   }
 
   async create(
@@ -199,6 +248,9 @@ export class WorkOrderService {
     const repairLocation = dto.repairLocation?.trim() || undefined;
     const flowType =
       dto.flowType ?? (repairLocation ? 'send_out' : 'in_store');
+    if (flowType === 'send_out' && !repairLocation) {
+      throw new BadRequestException('Send-out repair needs a repair location');
+    }
 
     let serialUnitId: Types.ObjectId | undefined;
     let serialSn = dto.imeiSn?.trim() || undefined;
@@ -251,7 +303,7 @@ export class WorkOrderService {
           ? formatPriceListLabel(brandName, deviceName, issue)
           : issue || issueDescription || 'Repair';
       if (!lines.length) {
-        lines = [{ description: desc, priceIncVat: flat.priceIncVat }];
+        lines = [{ description: desc, priceIncVat: quoted ?? flat.priceIncVat }];
       }
       if (quoted == null) quoted = flat.priceIncVat;
     }
@@ -259,6 +311,13 @@ export class WorkOrderService {
     if (quoted == null) {
       quoted = lines.reduce((s, l) => s + l.priceIncVat, 0);
     }
+
+    const savedPriceId = await this.priceList.rememberOrderQuote(companyId, {
+      brand: deviceBrand,
+      model: deviceModel,
+      issue: issueDescription,
+      price: dto.quotedPriceIncVat,
+    });
 
     const docNumber = await this.docSeq.next(companyId, 'work_order');
 
@@ -277,13 +336,14 @@ export class WorkOrderService {
       expectedCompletionAt: dto.expectedCompletionAt
         ? new Date(dto.expectedCompletionAt)
         : undefined,
-      priceListItemId: dto.priceListItemId
-        ? new Types.ObjectId(dto.priceListItemId)
-        : undefined,
+      priceListItemId:
+        savedPriceId ??
+        (dto.priceListItemId ? new Types.ObjectId(dto.priceListItemId) : undefined),
       customerId: dto.customerId
         ? new Types.ObjectId(dto.customerId)
         : undefined,
       customerPhone: dto.customerPhone.trim(),
+      notifySms: dto.notifySms === true,
       customerName: dto.customerName?.trim() || undefined,
       issueDescription,
       lines,
@@ -304,16 +364,57 @@ export class WorkOrderService {
       companyId: new Types.ObjectId(companyId),
     });
     if (!wo) throw new NotFoundException('Work order not found');
-    if (!['draft', 'in_progress', 'returned', 'awaiting_payment'].includes(wo.status)) {
+    if (
+      !['draft', 'in_progress', 'sent_out', 'in_repair', 'returned', 'awaiting_payment'].includes(
+        wo.status,
+      )
+    ) {
       throw new BadRequestException('Cannot edit work order in current status');
     }
     if (dto.lines) wo.lines = dto.lines;
-    if (dto.quotedPriceIncVat != null) wo.quotedPriceIncVat = dto.quotedPriceIncVat;
-    if (dto.issueDescription != null) wo.issueDescription = dto.issueDescription;
+    let priceChanged = false;
+    if (dto.quotedPriceIncVat != null) {
+      const next = Math.round(dto.quotedPriceIncVat * 100) / 100;
+      priceChanged = Math.abs(wo.quotedPriceIncVat - next) > 0.009;
+      wo.quotedPriceIncVat = next;
+      if (wo.lines.length === 1) wo.lines[0].priceIncVat = next;
+    }
+    let issueChanged = false;
+    if (dto.issueDescription != null) {
+      const nextIssue = dto.issueDescription.trim();
+      issueChanged = (wo.issueDescription ?? '').trim() !== nextIssue;
+      wo.issueDescription = nextIssue || undefined;
+    }
     if (dto.notes != null) wo.notes = dto.notes;
     if (dto.customerPhone != null) wo.customerPhone = dto.customerPhone;
     await wo.save();
-    return wo;
+
+    const changed = priceChanged || issueChanged;
+    if (changed) {
+      try {
+        await this.priceList.rememberOrderQuote(companyId, {
+          brand: wo.deviceBrand,
+          model: wo.deviceModel,
+          issue: wo.issueDescription,
+          price: wo.quotedPriceIncVat,
+        });
+      } catch {
+        // The work-order price is already saved. A catalog miss must not block the text.
+      }
+    }
+
+    let smsSent = false;
+    if (changed && wo.customerPhone) {
+      const price = wo.quotedPriceIncVat.toFixed(2);
+      const issue = wo.issueDescription?.trim();
+      const shop = await this.smsStoreName(wo.storeId);
+      const body = issue
+        ? `[${shop}] Repair ${wo.docNumber}: ${issue}. Price: €${price}.`
+        : `[${shop}] The price for repair ${wo.docNumber} is now €${price}.`;
+      const result = await this.sms.send(wo.customerPhone, body);
+      smsSent = result.sent;
+    }
+    return { ...wo.toObject(), smsSent, priceChanged: changed };
   }
 
   async transition(
@@ -358,9 +459,9 @@ export class WorkOrderService {
     }
 
     await wo.save();
-    await this.maybeSendSms(wo);
+    const smsSent = await this.maybeSendSms(wo);
 
-    return wo;
+    return { ...wo.toObject(), smsSent };
   }
 
   private async setSerialRepair(
@@ -404,21 +505,92 @@ export class WorkOrderService {
     });
   }
 
-  private async maybeSendSms(wo: WorkOrderDocument) {
+  async addPhoto(userId: string, companyId: string, id: string, jpeg: Buffer) {
+    await this.companyService.assertMember(userId, companyId);
+    const wo = await this.woModel.findOne({
+      _id: id,
+      companyId: new Types.ObjectId(companyId),
+    });
+    if (!wo) throw new NotFoundException('Work order not found');
+    if (['completed', 'cancelled'].includes(wo.status)) {
+      throw new BadRequestException('Cannot add photos to a closed work order');
+    }
+    if ((wo.photoIds?.length ?? 0) >= 6) {
+      throw new BadRequestException('A work order can have at most 6 photos');
+    }
+    if (jpeg.length < 32 || jpeg.length > 2_500_000 || jpeg[0] !== 0xff || jpeg[1] !== 0xd8) {
+      throw new BadRequestException('Photo must be a JPEG');
+    }
+    const photoId = randomBytes(12).toString('hex');
+    const file = this.photoFile(companyId, wo._id.toString(), photoId);
+    await mkdir(join(file, '..'), { recursive: true });
+    await writeFile(file, jpeg);
+    wo.photoIds = [...(wo.photoIds ?? []), photoId];
+    await wo.save();
+    return { photoId };
+  }
+
+  async readPhoto(userId: string, companyId: string, id: string, photoId: string) {
+    await this.companyService.assertMember(userId, companyId);
+    const wo = await this.woModel
+      .findOne({ _id: id, companyId: new Types.ObjectId(companyId) })
+      .select({ photoIds: 1 })
+      .lean();
+    if (!wo) throw new NotFoundException('Work order not found');
+    if (!wo.photoIds?.includes(photoId)) throw new NotFoundException('Photo not found');
+    try {
+      return await readFile(this.photoFile(companyId, id, photoId));
+    } catch {
+      throw new NotFoundException('Photo not found');
+    }
+  }
+
+  private photoFile(companyId: string, orderId: string, photoId: string) {
+    if (!/^[a-f0-9]{24}$/.test(companyId) || !/^[a-f0-9]{24}$/.test(orderId)) {
+      throw new BadRequestException('Invalid work order');
+    }
+    if (!/^[a-f0-9]{24}$/.test(photoId)) throw new BadRequestException('Invalid photo');
+    const root = resolve(process.cwd(), 'data', 'work-order-photos');
+    const file = resolve(root, companyId, orderId, `${photoId}.jpg`);
+    if (!file.startsWith(root + sep)) throw new BadRequestException('Invalid photo');
+    return file;
+  }
+
+  private async photoDataUrls(wo: {
+    companyId: Types.ObjectId;
+    _id: Types.ObjectId;
+    photoIds?: string[];
+  }) {
+    const urls: string[] = [];
+    for (const photoId of wo.photoIds ?? []) {
+      try {
+        const bytes = await readFile(
+          this.photoFile(wo.companyId.toString(), wo._id.toString(), photoId),
+        );
+        urls.push(`data:image/jpeg;base64,${bytes.toString('base64')}`);
+      } catch {
+        // A missing file should not stop the shop receipt.
+      }
+    }
+    return urls;
+  }
+
+  private async smsStoreName(storeId?: Types.ObjectId | null): Promise<string> {
+    if (!storeId) return 'Store';
+    const store = await this.storeModel.findById(storeId).select('name').lean();
+    return store?.name?.trim() || 'Store';
+  }
+
+  private async maybeSendSms(wo: WorkOrderDocument): Promise<boolean> {
     const trigger = SMS_ON_ENTER[wo.status];
-    if (!trigger || !wo.customerPhone) return;
+    if (!trigger || !wo.notifySms || !wo.customerPhone) return false;
 
     const price = wo.quotedPriceIncVat.toFixed(2);
-    if (trigger === 'price_confirm') {
-      await this.sms.send(
-        wo.customerPhone,
-        `[LZ3C] Repair ${wo.docNumber}: please confirm price €${price}. Reply or visit store to pay.`,
-      );
-    } else if (trigger === 'ready') {
-      await this.sms.send(
-        wo.customerPhone,
-        `[LZ3C] Repair ${wo.docNumber} is ready for collection. Thank you!`,
-      );
-    }
+    const shop = await this.smsStoreName(wo.storeId);
+    const result = await this.sms.send(
+      wo.customerPhone,
+      `[${shop}] Repair ${wo.docNumber} is ready. Please collect it in store. Charge: €${price}.`,
+    );
+    return result.sent;
   }
 }

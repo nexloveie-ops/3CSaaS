@@ -25,6 +25,10 @@ export class UpdateProductDto {
 
   @IsOptional()
   @IsString()
+  barcode?: string;
+
+  @IsOptional()
+  @IsString()
   category?: string;
 
   @IsOptional()
@@ -43,7 +47,7 @@ export class UpdateProductDto {
   @IsOptional()
   @IsNumber()
   @Min(0)
-  wholesalePrice?: number;
+  wholesalePrice?: number | null;
 
   @IsOptional()
   @IsNumber()

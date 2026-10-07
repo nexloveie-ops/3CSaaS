@@ -11,6 +11,7 @@ import { TodayReceiptsPanel } from '../components/pos/TodayReceiptsPanel';
 import { VariantPickModal } from '../components/pos/VariantPickModal';
 import { QuickSaleModal } from '../components/pos/QuickSaleModal';
 import { SalePrintPromptModal } from '../components/pos/SalePrintPromptModal';
+import { OrderPhotos } from '../components/repairs/OrderPhotos';
 import { api } from '../lib/api';
 import { useContextStore } from '../stores/context';
 
@@ -24,6 +25,8 @@ type PayableWorkOrder = {
   deviceBrand?: string;
   deviceModel?: string;
   issueDescription?: string;
+  notes?: string;
+  photoIds?: string[];
   quotedPriceIncVat: number;
 };
 
@@ -647,6 +650,8 @@ export function PosPage() {
                       {wo.issueDescription && (
                         <span className="pos-product-meta">{wo.issueDescription}</span>
                       )}
+                      {wo.notes && <span className="pos-product-meta">{wo.notes}</span>}
+                      <OrderPhotos orderId={wo._id} photoIds={wo.photoIds} />
                       <span className="pos-product-price">
                         €{wo.quotedPriceIncVat.toFixed(2)}
                       </span>

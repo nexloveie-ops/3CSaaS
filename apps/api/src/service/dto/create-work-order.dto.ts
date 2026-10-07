@@ -1,6 +1,7 @@
 import { Type } from 'class-transformer';
 import {
   IsArray,
+  IsBoolean,
   IsDateString,
   IsEnum,
   IsMongoId,
@@ -27,6 +28,10 @@ export class CreateWorkOrderDto {
   @IsNotEmpty()
   @IsString()
   customerPhone!: string;
+
+  @IsOptional()
+  @IsBoolean()
+  notifySms?: boolean;
 
   @IsOptional()
   @IsString()

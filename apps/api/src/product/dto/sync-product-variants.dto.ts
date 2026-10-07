@@ -39,6 +39,11 @@ export class VariantLineDto {
   retailPrice?: number;
 
   @IsOptional()
+  @IsNumber()
+  @Min(0)
+  wholesalePrice?: number;
+
+  @IsOptional()
   @IsString()
   skuCode?: string;
 }

@@ -76,6 +76,10 @@ export class WorkOrder {
   @Prop({ trim: true })
   customerPhone?: string;
 
+  /** Customer opted in at intake to a ready-for-collection text. */
+  @Prop({ default: false })
+  notifySms?: boolean;
+
   @Prop({ trim: true })
   customerName?: string;
 
@@ -100,6 +104,10 @@ export class WorkOrder {
 
   @Prop()
   notes?: string;
+
+  /** Intake condition photos, stored as files. Ids only live on the order. */
+  @Prop({ type: [String], default: [] })
+  photoIds!: string[];
 }
 
 export const WorkOrderSchema = SchemaFactory.createForClass(WorkOrder);

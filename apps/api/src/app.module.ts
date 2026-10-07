@@ -29,6 +29,7 @@ import { WarehouseModule } from './warehouse/warehouse.module';
 import { SubscriptionModule } from './subscription/subscription.module';
 import { StorageModule } from './storage/storage.module';
 import { TaxModule } from './tax/tax.module';
+import { BuyInModule } from './buy-in/buy-in.module';
 
 @Module({
   imports: [
@@ -67,6 +68,7 @@ import { TaxModule } from './tax/tax.module';
     TaxModule,
     ProductModule,
     SerialModule,
+    BuyInModule,
     InventoryModule,
     CustomerModule,
     PosModule,

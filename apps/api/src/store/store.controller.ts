@@ -12,9 +12,12 @@ import { AuthGuard } from '@nestjs/passport';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { CreateStoreDto } from './dto/create-store.dto';
+import { CreateTerminalPaymentDto } from './dto/create-terminal-payment.dto';
 import { UpdateStoreProfileDto } from './dto/update-store-profile.dto';
 import { UpdateStoreRepairTermsDto } from './dto/update-store-repair-terms.dto';
 import { UpdateStoreSalesTermsDto } from './dto/update-store-sales-terms.dto';
+import { TestStoreFeieDto } from './dto/test-store-feie.dto';
+import { TestStoreStripeDto } from './dto/test-store-stripe.dto';
 import { StoreService } from './store.service';
 
 @Controller('stores')
@@ -46,6 +49,45 @@ export class StoreController {
     @Param('id') id: string,
   ) {
     return this.storeService.getOne(user.userId, companyId, id);
+  }
+
+  @Post(':id/feie-test')
+  testFeie(
+    @CurrentUser() user: { userId: string },
+    @Headers('x-company-id') companyId: string,
+    @Param('id') id: string,
+    @Body() dto: TestStoreFeieDto,
+  ) {
+    return this.storeService.testFeie(user.userId, companyId, id, dto);
+  }
+
+  @Post(':id/terminal/connection-token')
+  connectionToken(
+    @CurrentUser() user: { userId: string },
+    @Headers('x-company-id') companyId: string,
+    @Param('id') id: string,
+  ) {
+    return this.storeService.createTerminalConnectionToken(user.userId, companyId, id);
+  }
+
+  @Post(':id/terminal/payment-intent')
+  terminalPaymentIntent(
+    @CurrentUser() user: { userId: string },
+    @Headers('x-company-id') companyId: string,
+    @Param('id') id: string,
+    @Body() dto: CreateTerminalPaymentDto,
+  ) {
+    return this.storeService.createTerminalPaymentIntent(user.userId, companyId, id, dto);
+  }
+
+  @Post(':id/stripe-test')
+  testStripe(
+    @CurrentUser() user: { userId: string },
+    @Headers('x-company-id') companyId: string,
+    @Param('id') id: string,
+    @Body() dto: TestStoreStripeDto,
+  ) {
+    return this.storeService.testStripe(user.userId, companyId, id, dto);
   }
 
   @Patch(':id/profile')

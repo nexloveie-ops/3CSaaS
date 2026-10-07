@@ -68,6 +68,14 @@ export class Company {
   })
   serialStatuses!: string[];
 
+  /** Feie cloud print account (飞鹅后台用户名). */
+  @Prop({ trim: true })
+  feieUser?: string;
+
+  /** Feie developer UKEY used to sign print requests. Not returned in company lists. */
+  @Prop({ trim: true, select: false })
+  feieUkey?: string;
+
   /** Optional HTTPS endpoint for event webhooks (audit-backed events). */
   @Prop({ trim: true })
   webhookUrl?: string;

@@ -41,14 +41,12 @@ export class InvoiceBuilderService {
       const sellerTax = calculateLineTax({
         scheme: line.taxScheme as TaxScheme,
         wholesalePreTax: line.unitWholesalePreTax,
-        costPreTax: line.costPreTax,
         perspective: 'b2b_seller',
         quantity: line.quantity,
       });
       const buyerTax = calculateLineTax({
         scheme: line.taxScheme as TaxScheme,
         wholesalePreTax: line.unitWholesalePreTax,
-        costPreTax: line.costPreTax,
         perspective: 'b2b_buyer',
         quantity: line.quantity,
       });

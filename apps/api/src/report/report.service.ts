@@ -13,7 +13,6 @@ import {
 } from '@lz3c/db';
 import { calculateLineTax, taxSchemeReportLabel, type TaxScheme } from '@lz3c/shared';
 import { CompanyService } from '../company/company.service';
-import { lineNetRevenue, orderNetPaymentSplit } from '../pos/payment.util';
 
 /** When a repair receipt line has no cost, assume 50% gross margin on net (ex-VAT) revenue. */
 const REPAIR_DEFAULT_PROFIT_MARGIN = 0.5;
@@ -38,15 +37,16 @@ export class ReportService {
     to: string,
   ) {
     await this.companyService.assertMember(userId, companyId);
-    const orders = await this.orderModel
-      .find({
-        companyId: new Types.ObjectId(companyId),
-        storeId: new Types.ObjectId(storeId),
-        businessDate: { $gte: from, $lte: to },
-        docType: 'receipt',
-        status: 'completed',
-      })
-      .lean();
+    const range = {
+      companyId: new Types.ObjectId(companyId),
+      storeId: new Types.ObjectId(storeId),
+      businessDate: { $gte: from, $lte: to },
+      status: 'completed',
+    };
+    const [orders, creditNotes] = await Promise.all([
+      this.orderModel.find({ ...range, docType: 'receipt' }).lean(),
+      this.orderModel.find({ ...range, docType: 'credit_note' }).lean(),
+    ]);
 
     const taxCategories = await this.taxModel
       .find({ companyId: new Types.ObjectId(companyId), isActive: true })
@@ -66,48 +66,37 @@ export class ReportService {
       { revenueIncVat: number; vat: number; revenueExVat: number; cost: number }
     >();
 
-    for (const o of orders) {
-      const split = orderNetPaymentSplit(o);
-      cashTotal += split.cash;
-      cardTotal += split.card;
-      otherTotal += split.other;
+    const apply = (order: (typeof orders)[number], sign: number) => {
+      const split = grossPaymentSplit(order);
+      cashTotal += sign * split.cash;
+      cardTotal += sign * split.card;
+      otherTotal += sign * split.other;
 
-      for (const line of o.lines) {
-        const refunded = line.refundedQuantity ?? 0;
-        const remaining = line.quantity - refunded;
-        if (remaining <= 0) continue;
+      for (const line of order.lines) {
+        const figures = lineFigures(line);
+        if (figures.gross <= 0 && figures.items <= 0) continue;
+        turnoverIncVat += sign * figures.gross;
+        itemsSold += sign * figures.items;
+        if (line.workOrderId) repairRevenueIncVat += sign * figures.gross;
+        vatTotal += sign * figures.vat;
+        costTotal += sign * figures.cost;
 
-        const net = lineNetRevenue(line);
-        turnoverIncVat += net;
-        itemsSold += remaining;
-        if (line.workOrderId) repairRevenueIncVat += net;
-
-        const unitGross = line.lineTotalIncVat / line.quantity;
         const scheme = (line.taxScheme || 'standard_23') as TaxScheme;
-        const tax = calculateLineTax({
-          scheme,
-          salePriceIncVat: unitGross,
-          costPreTax: line.costPreTax ?? 0,
-          perspective: 'retail',
-          quantity: remaining,
-        });
-        vatTotal += tax.vatAmount;
-        const lineCost = effectiveLineCost(line, remaining, tax.netPreTax);
-        costTotal += lineCost;
-
         const bucket = byTax.get(scheme) ?? {
           revenueIncVat: 0,
           vat: 0,
           revenueExVat: 0,
           cost: 0,
         };
-        bucket.revenueIncVat += net;
-        bucket.vat += tax.vatAmount;
-        bucket.revenueExVat += tax.netPreTax;
-        bucket.cost += lineCost;
+        bucket.revenueIncVat += sign * figures.gross;
+        bucket.vat += sign * figures.vat;
+        bucket.revenueExVat += sign * figures.net;
+        bucket.cost += sign * figures.cost;
         byTax.set(scheme, bucket);
       }
-    }
+    };
+    for (const order of orders) apply(order, 1);
+    for (const note of creditNotes) apply(note, -1);
 
     const turnoverExVat = turnoverIncVat - vatTotal;
     const grossProfit = turnoverExVat - costTotal;
@@ -150,26 +139,34 @@ export class ReportService {
     await this.companyService.assertMember(userId, companyId);
     const date = businessDate ?? new Date().toISOString().slice(0, 10);
 
-    const orders = await this.orderModel.find({
+    const day = {
       companyId: new Types.ObjectId(companyId),
       storeId: new Types.ObjectId(storeId),
       businessDate: date,
-      docType: 'receipt',
       status: 'completed',
-    });
+    };
+    const [orders, creditNotes] = await Promise.all([
+      this.orderModel.find({ ...day, docType: 'receipt' }),
+      this.orderModel.find({ ...day, docType: 'credit_note' }),
+    ]);
 
     let salesTotal = 0;
     let cashTotal = 0;
     let cardTotal = 0;
     let otherTotal = 0;
 
-    for (const o of orders) {
-      const split = orderNetPaymentSplit(o);
-      salesTotal += split.cash + split.card + split.other;
-      cashTotal += split.cash;
-      cardTotal += split.card;
-      otherTotal += split.other;
-    }
+    const applySplit = (
+      order: { paymentMethod: string; totalIncVat: number; cashAmount?: number; cardAmount?: number },
+      sign: number,
+    ) => {
+      const split = grossPaymentSplit(order);
+      salesTotal += sign * (split.cash + split.card + split.other);
+      cashTotal += sign * split.cash;
+      cardTotal += sign * split.card;
+      otherTotal += sign * split.other;
+    };
+    for (const order of orders) applySplit(order, 1);
+    for (const note of creditNotes) applySplit(note, -1);
 
     const openWorkOrders = await this.woModel.countDocuments({
       storeId: new Types.ObjectId(storeId),
@@ -221,24 +218,30 @@ export class ReportService {
       businessDate: date,
     });
 
-    const orders = await this.orderModel.find({
-      companyId: new Types.ObjectId(companyId),
-      businessDate: date,
-      docType: 'receipt',
-      status: 'completed',
-    });
+    const [orders, creditNotes] = await Promise.all([
+      this.orderModel.find({
+        companyId: new Types.ObjectId(companyId),
+        businessDate: date,
+        docType: 'receipt',
+        status: 'completed',
+      }),
+      this.orderModel.find({
+        companyId: new Types.ObjectId(companyId),
+        businessDate: date,
+        docType: 'credit_note',
+        status: 'completed',
+      }),
+    ]);
 
     let marginEstimate = 0;
-    for (const o of orders) {
-      for (const line of o.lines) {
-        const refunded = line.refundedQuantity ?? 0;
-        const remaining = line.quantity - refunded;
-        if (remaining <= 0) continue;
-        const net = lineNetRevenue(line);
-        const cost = (line.costPreTax ?? 0) * remaining;
-        marginEstimate += net - cost;
+    const addMargin = (lines: { lineTotalIncVat: number; quantity: number; taxScheme?: string; costPreTax?: number; workOrderId?: unknown }[], sign: number) => {
+      for (const line of lines) {
+        const figures = lineFigures(line);
+        marginEstimate += sign * (figures.gross - figures.cost);
       }
-    }
+    };
+    for (const order of orders) addMargin(order.lines, 1);
+    for (const note of creditNotes) addMargin(note.lines, -1);
 
     return {
       businessDate: date,
@@ -263,16 +266,16 @@ export class ReportService {
     const date = businessDate ?? new Date().toISOString().slice(0, 10);
     const summary = await this.getSummary(userId, companyId, storeId, date);
 
-    const orders = await this.orderModel
-      .find({
-        companyId: new Types.ObjectId(companyId),
-        storeId: new Types.ObjectId(storeId),
-        businessDate: date,
-        docType: 'receipt',
-        status: 'completed',
-      })
-      .sort({ docNumber: 1 })
-      .lean();
+    const dayFilter = {
+      companyId: new Types.ObjectId(companyId),
+      storeId: new Types.ObjectId(storeId),
+      businessDate: date,
+      status: 'completed' as const,
+    };
+    const [orders, creditNotes] = await Promise.all([
+      this.orderModel.find({ ...dayFilter, docType: 'receipt' }).sort({ docNumber: 1 }).lean(),
+      this.orderModel.find({ ...dayFilter, docType: 'credit_note' }).sort({ docNumber: 1 }).lean(),
+    ]);
 
     const lines: string[][] = [
       ['section', 'field', 'value'],
@@ -287,21 +290,27 @@ export class ReportService {
       ['docNumber', 'paymentMethod', 'productName', 'quantity', 'lineTotalIncVat', 'sn'],
     ];
 
-    for (const o of orders) {
-      for (const line of o.lines) {
-        const refunded = line.refundedQuantity ?? 0;
-        const remaining = line.quantity - refunded;
-        if (remaining <= 0) continue;
-        lines.push([
-          o.docNumber,
-          o.paymentMethod,
-          line.productName,
-          String(remaining),
-          String(lineNetRevenue(line)),
-          line.sn ?? '',
-        ]);
+    const pushLines = (
+      docs: typeof orders,
+      sign: number,
+    ) => {
+      for (const o of docs) {
+        for (const line of o.lines) {
+          const figures = lineFigures(line);
+          if (figures.gross <= 0 && figures.items <= 0) continue;
+          lines.push([
+            o.docNumber,
+            o.paymentMethod,
+            line.productName,
+            String(sign * figures.items),
+            String(round2(sign * figures.gross)),
+            line.sn ?? '',
+          ]);
+        }
       }
-    }
+    };
+    pushLines(orders, 1);
+    pushLines(creditNotes, -1);
 
     return lines.map((row) => row.map(csvEscape).join(',')).join('\n');
   }
@@ -352,6 +361,11 @@ export class ReportService {
     if (storeId) q.storeId = new Types.ObjectId(storeId);
 
     const orders = await this.orderModel.find(q).sort({ businessDate: 1, docNumber: 1 }).lean();
+    const creditFilter = { ...q, docType: 'credit_note' };
+    const creditNotes = await this.orderModel
+      .find(creditFilter)
+      .sort({ businessDate: 1, docNumber: 1 })
+      .lean();
 
     const lines: string[][] = [
       ['from', 'to', from, to],
@@ -359,25 +373,27 @@ export class ReportService {
     ];
 
     let total = 0;
-    for (const o of orders) {
-      for (const line of o.lines) {
-        const net = lineNetRevenue(line);
-        if (net <= 0) continue;
-        const refunded = line.refundedQuantity ?? 0;
-        const remaining = line.quantity - refunded;
-        total += net;
-        lines.push([
-          o.docNumber,
-          o.businessDate ?? '',
-          o.storeId.toString(),
-          o.paymentMethod,
-          line.productName,
-          String(remaining),
-          String(net),
-          line.sn ?? '',
-        ]);
+    const pushRange = (docs: typeof orders, sign: number) => {
+      for (const o of docs) {
+        for (const line of o.lines) {
+          const figures = lineFigures(line);
+          if (figures.gross <= 0 && figures.items <= 0) continue;
+          total += sign * figures.gross;
+          lines.push([
+            o.docNumber,
+            o.businessDate ?? '',
+            o.storeId.toString(),
+            o.paymentMethod,
+            line.productName,
+            String(sign * figures.items),
+            String(round2(sign * figures.gross)),
+            line.sn ?? '',
+          ]);
+        }
       }
-    }
+    };
+    pushRange(orders, 1);
+    pushRange(creditNotes, -1);
     lines.push([]);
     lines.push(['totalSales', String(round2(total)), 'receiptCount', String(orders.length)]);
 
@@ -392,6 +408,56 @@ function csvEscape(v: string) {
 
 function round2(n: number) {
   return Math.round(n * 100) / 100;
+}
+
+function grossPaymentSplit(order: {
+  paymentMethod: string;
+  totalIncVat: number;
+  cashAmount?: number;
+  cardAmount?: number;
+}): { cash: number; card: number; other: number } {
+  const cash = order.cashAmount ?? 0;
+  const card = order.cardAmount ?? 0;
+  if (cash > 0 || card > 0) {
+    const covered = round2(cash + card);
+    const remainder = round2(Math.max(0, order.totalIncVat - covered));
+    const other =
+      order.paymentMethod === 'other' ||
+      order.paymentMethod === 'bank_transfer' ||
+      order.paymentMethod === 'mixed'
+        ? remainder
+        : 0;
+    return { cash, card, other };
+  }
+  if (order.paymentMethod === 'card') return { cash: 0, card: order.totalIncVat, other: 0 };
+  if (order.paymentMethod === 'cash') return { cash: order.totalIncVat, card: 0, other: 0 };
+  return { cash: 0, card: 0, other: order.totalIncVat };
+}
+
+function lineFigures(line: {
+  quantity: number;
+  lineTotalIncVat: number;
+  taxScheme?: string;
+  costPreTax?: number;
+  workOrderId?: unknown;
+}): { gross: number; vat: number; net: number; cost: number; items: number } {
+  const gross = line.lineTotalIncVat;
+  if (gross <= 0 && line.quantity <= 0) {
+    return { gross: 0, vat: 0, net: 0, cost: 0, items: 0 };
+  }
+  const taxQty = line.quantity > 0 ? line.quantity : 1;
+  const unit = gross / taxQty;
+  const scheme = (line.taxScheme || 'standard_23') as TaxScheme;
+  const tax = calculateLineTax({
+    scheme,
+    salePriceIncVat: unit,
+    costPreTax: line.costPreTax ?? 0,
+    perspective: 'retail',
+    quantity: taxQty,
+  });
+  const items = line.quantity > 0 ? line.quantity : 0;
+  const cost = items > 0 ? effectiveLineCost(line, items, tax.netPreTax) : 0;
+  return { gross, vat: tax.vatAmount, net: tax.netPreTax, cost, items };
 }
 
 function effectiveLineCost(

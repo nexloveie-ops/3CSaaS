@@ -9,6 +9,7 @@ import {
 import { api } from '../../lib/api';
 
 type DimensionDraft = { name: string; valuesText: string };
+type VariantPrices = { costPrice: string; retailPrice: string; wholesalePrice: string };
 
 type Props = {
   parentId: string;
@@ -37,7 +38,7 @@ export function ProductVariantEditor({
     { name: '', valuesText: '' },
   ]);
   const [priceByKey, setPriceByKey] = useState<
-    Record<string, { costPrice: string; retailPrice: string }>
+    Record<string, VariantPrices>
   >({});
 
   useEffect(() => {
@@ -53,12 +54,13 @@ export function ProductVariantEditor({
 
     setDimensions(dims.length ? dims : [{ name: '', valuesText: '' }]);
 
-    const prices: Record<string, { costPrice: string; retailPrice: string }> = {};
+    const prices: Record<string, VariantPrices> = {};
     for (const v of variants) {
       const key = variantCombinationKey(v.variantValues);
       prices[key] = {
         costPrice: String(v.costPrice),
         retailPrice: v.retailPrice != null ? String(v.retailPrice) : '',
+        wholesalePrice: v.wholesalePrice != null ? String(v.wholesalePrice) : '',
       };
     }
     setPriceByKey(prices);
@@ -90,6 +92,7 @@ export function ProductVariantEditor({
           next[key] = {
             costPrice: String(defaultCost),
             retailPrice: defaultRetail != null ? String(defaultRetail) : '',
+            wholesalePrice: '',
           };
         }
       }
@@ -109,11 +112,13 @@ export function ProductVariantEditor({
           const row = priceByKey[key] ?? {
             costPrice: String(defaultCost),
             retailPrice: defaultRetail != null ? String(defaultRetail) : '',
+            wholesalePrice: '',
           };
           return {
             variantValues,
             costPrice: Number(row.costPrice) || 0,
             retailPrice: row.retailPrice ? Number(row.retailPrice) : undefined,
+            wholesalePrice: row.wholesalePrice.trim() === '' ? undefined : Number(row.wholesalePrice),
           };
         }),
       });
@@ -215,6 +220,7 @@ export function ProductVariantEditor({
                     <tr>
                       <th>SKU</th>
                       <th>{t('products.variantCost')}</th>
+                      <th>{t('products.wholesalePrice')}</th>
                       <th>{t('products.variantRetail')}</th>
                     </tr>
                   </thead>
@@ -223,6 +229,7 @@ export function ProductVariantEditor({
                       const key = variantCombinationKey(combo);
                       const row = priceByKey[key] ?? {
                         costPrice: String(defaultCost),
+                        wholesalePrice: '',
                         retailPrice: '',
                       };
                       return (
@@ -238,6 +245,21 @@ export function ProductVariantEditor({
                                 setPriceByKey((prev) => ({
                                   ...prev,
                                   [key]: { ...row, costPrice: e.target.value },
+                                }))
+                              }
+                              style={{ width: 88 }}
+                            />
+                          </td>
+                          <td>
+                            <input
+                              type="number"
+                              step="0.01"
+                              min={0}
+                              value={row.wholesalePrice}
+                              onChange={(e) =>
+                                setPriceByKey((prev) => ({
+                                  ...prev,
+                                  [key]: { ...row, wholesalePrice: e.target.value },
                                 }))
                               }
                               style={{ width: 88 }}

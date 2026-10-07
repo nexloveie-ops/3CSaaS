@@ -27,6 +27,8 @@ export function DashboardPage() {
   const [inviteRole, setInviteRole] = useState('cashier');
   const [inviteStoreId, setInviteStoreId] = useState('');
   const [lastInviteUrl, setLastInviteUrl] = useState('');
+  const [feieUser, setFeieUser] = useState('');
+  const [feieUkey, setFeieUkey] = useState('');
   const [webhookUrl, setWebhookUrl] = useState('');
   const [auditRetentionDays, setAuditRetentionDays] = useState(365);
   const [inviteEmailNote, setInviteEmailNote] = useState('');
@@ -45,6 +47,14 @@ export function DashboardPage() {
   const [storeAddress, setStoreAddress] = useState('');
   const [storePhone, setStorePhone] = useState('');
   const [storeEmail, setStoreEmail] = useState('');
+  const [stripePublishableKey, setStripePublishableKey] = useState('');
+  const [stripeSecretKey, setStripeSecretKey] = useState('');
+  const [stripeLocationId, setStripeLocationId] = useState('');
+  const [feiePrinterSn, setFeiePrinterSn] = useState('');
+  const [feieTestMessage, setFeieTestMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const [stripeTestMessage, setStripeTestMessage] = useState<{ ok: boolean; text: string } | null>(
+    null,
+  );
   const [storeEditName, setStoreEditName] = useState('');
   const [storeEditWarehouse, setStoreEditWarehouse] = useState(false);
   const [editingStoreMember, setEditingStoreMember] = useState<{
@@ -83,6 +93,8 @@ export function DashboardPage() {
   useEffect(() => {
     type CompanyFormSource = {
       _id?: string;
+      feieUser?: string;
+      feieUkey?: string;
       webhookUrl?: string;
       auditRetentionDays?: number;
       inviteEmailNote?: string;
@@ -97,6 +109,8 @@ export function DashboardPage() {
     };
 
     const resetCompanyForm = () => {
+      setFeieUser('');
+      setFeieUkey('');
       setWebhookUrl('');
       setAuditRetentionDays(365);
       setInviteEmailNote('');
@@ -121,6 +135,8 @@ export function DashboardPage() {
       return;
     }
 
+    setFeieUser(c.feieUser ?? '');
+    setFeieUkey(c.feieUkey ?? '');
     setWebhookUrl(c.webhookUrl ?? '');
     setAuditRetentionDays(c.auditRetentionDays ?? 365);
     setInviteEmailNote(c.inviteEmailNote ?? '');
@@ -147,6 +163,12 @@ export function DashboardPage() {
       setStoreAddress('');
       setStorePhone('');
       setStoreEmail('');
+      setStripePublishableKey('');
+      setStripeSecretKey('');
+      setStripeLocationId('');
+      setFeiePrinterSn('');
+      setFeieTestMessage(null);
+      setStripeTestMessage(null);
     };
 
     if (!storeId) {
@@ -162,6 +184,10 @@ export function DashboardPage() {
           address?: string;
           phone?: string;
           email?: string;
+          stripePublishableKey?: string;
+          stripeSecretKey?: string;
+          stripeLocationId?: string;
+          feiePrinterSn?: string;
         }
       | undefined;
     if (!s || s._id !== storeId) {
@@ -174,6 +200,12 @@ export function DashboardPage() {
     setStoreAddress(s.address ?? '');
     setStorePhone(s.phone ?? '');
     setStoreEmail(s.email ?? '');
+    setStripePublishableKey(s.stripePublishableKey ?? '');
+    setStripeSecretKey(s.stripeSecretKey ?? '');
+    setStripeLocationId(s.stripeLocationId ?? '');
+    setFeiePrinterSn(s.feiePrinterSn ?? '');
+    setFeieTestMessage(null);
+    setStripeTestMessage(null);
   }, [storeId, selectedStore]);
 
   const { data: stores } = useQuery({
@@ -268,6 +300,8 @@ export function DashboardPage() {
         auditRetentionDays,
         inviteEmailNote: inviteEmailNote || undefined,
         inviteEmailNoteZh: inviteEmailNoteZh || undefined,
+        feieUser,
+        feieUkey,
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['company', companyId] });
@@ -296,11 +330,61 @@ export function DashboardPage() {
         address: storeAddress || undefined,
         phone: storePhone || undefined,
         email: storeEmail || undefined,
+        stripePublishableKey,
+        stripeSecretKey,
+        stripeLocationId,
+        feiePrinterSn,
         warehouseEnabled: storeEditWarehouse,
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['store', storeId] });
       qc.invalidateQueries({ queryKey: ['stores', companyId] });
+    },
+  });
+
+  const testStoreFeie = useMutation({
+    mutationFn: () => api.testStoreFeie(storeId!, feiePrinterSn.trim()),
+    onSuccess: (result) => {
+      setFeieTestMessage({
+        ok: true,
+        text: t('dashboard.feieTestOk', { status: result.status }),
+      });
+    },
+    onError: (err: Error) => {
+      const key = `dashboard.${err.message}`;
+      const translated = t(key);
+      setFeieTestMessage({
+        ok: false,
+        text: translated === key ? err.message : translated,
+      });
+    },
+  });
+
+  const testStoreStripe = useMutation({
+    mutationFn: () =>
+      api.testStoreStripe(storeId!, {
+        stripePublishableKey: stripePublishableKey.trim(),
+        stripeSecretKey: stripeSecretKey.trim(),
+        stripeLocationId: stripeLocationId.trim() || undefined,
+      }),
+    onSuccess: (result) => {
+      const mode = t(
+        result.mode === 'live' ? 'dashboard.stripeTestModeLive' : 'dashboard.stripeTestModeTest',
+      );
+      setStripeTestMessage({
+        ok: true,
+        text: result.locationName
+          ? t('dashboard.stripeTestOkLocation', { mode, location: result.locationName })
+          : t('dashboard.stripeTestOk', { mode }),
+      });
+    },
+    onError: (err: Error) => {
+      const key = `dashboard.${err.message}`;
+      const translated = t(key);
+      setStripeTestMessage({
+        ok: false,
+        text: translated === key ? err.message : translated,
+      });
     },
   });
 
@@ -588,6 +672,93 @@ export function DashboardPage() {
                     />
                   </div>
                 </div>
+                <div className="form-field">
+                  <label>{t('dashboard.stripePublishableKey')}</label>
+                  <input
+                    autoComplete="off"
+                    spellCheck={false}
+                    value={stripePublishableKey}
+                    onChange={(e) => {
+                      setStripePublishableKey(e.target.value);
+                      setStripeTestMessage(null);
+                    }}
+                    placeholder="pk_test_…"
+                  />
+                  <p className="form-hint">{t('dashboard.stripePublishableKeyHint')}</p>
+                </div>
+                <div className="form-field">
+                  <label>{t('dashboard.stripeSecretKey')}</label>
+                  <input
+                    type="password"
+                    autoComplete="off"
+                    spellCheck={false}
+                    value={stripeSecretKey}
+                    onChange={(e) => {
+                      setStripeSecretKey(e.target.value);
+                      setStripeTestMessage(null);
+                    }}
+                    placeholder="sk_test_…"
+                  />
+                  <p className="form-hint">{t('dashboard.stripeSecretKeyHint')}</p>
+                </div>
+                <div className="form-field">
+                  <label>{t('dashboard.stripeLocationId')}</label>
+                  <input
+                    autoComplete="off"
+                    spellCheck={false}
+                    value={stripeLocationId}
+                    onChange={(e) => {
+                      setStripeLocationId(e.target.value);
+                      setStripeTestMessage(null);
+                    }}
+                    placeholder="tml_…"
+                  />
+                  <p className="form-hint">{t('dashboard.stripeLocationIdHint')}</p>
+                </div>
+                <div className="form-field">
+                  <label>{t('dashboard.feiePrinterSn')}</label>
+                  <input
+                    autoComplete="off"
+                    spellCheck={false}
+                    value={feiePrinterSn}
+                    onChange={(e) => {
+                      setFeiePrinterSn(e.target.value);
+                      setFeieTestMessage(null);
+                    }}
+                  />
+                  <p className="form-hint">{t('dashboard.feiePrinterSnHint')}</p>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    disabled={!feiePrinterSn.trim() || testStoreFeie.isPending}
+                    onClick={() => testStoreFeie.mutate()}
+                  >
+                    {testStoreFeie.isPending ? t('dashboard.feieTesting') : t('dashboard.feieTest')}
+                  </button>
+                  {feieTestMessage && (
+                    <p className={feieTestMessage.ok ? 'status-ok' : 'status-fail'}>
+                      {feieTestMessage.text}
+                    </p>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  style={{ marginRight: 8 }}
+                  disabled={
+                    !stripePublishableKey.trim() ||
+                    !stripeSecretKey.trim() ||
+                    testStoreStripe.isPending
+                  }
+                  onClick={() => testStoreStripe.mutate()}
+                >
+                  {testStoreStripe.isPending ? t('dashboard.stripeTesting') : t('dashboard.stripeTest')}
+                </button>
+                {stripeTestMessage && (
+                  <p className={stripeTestMessage.ok ? 'status-ok' : 'status-fail'}>
+                    {stripeTestMessage.text}
+                  </p>
+                )}
                 <button
                   type="button"
                   disabled={!storeEditName.trim() || saveStoreProfile.isPending}
@@ -944,6 +1115,27 @@ export function DashboardPage() {
       {companyId && billingInfo?.subscriptionStatus !== 'read_only' && (
         <details className="section-card collapsible-section dashboard-integrations-section">
           <summary>{t('dashboard.integrations')}</summary>
+          <div className="form-field">
+            <label>{t('dashboard.feieUser')}</label>
+            <input
+              autoComplete="off"
+              spellCheck={false}
+              value={feieUser}
+              onChange={(e) => setFeieUser(e.target.value)}
+            />
+            <p className="form-hint">{t('dashboard.feieUserHint')}</p>
+          </div>
+          <div className="form-field">
+            <label>{t('dashboard.feieUkey')}</label>
+            <input
+              type="password"
+              autoComplete="off"
+              spellCheck={false}
+              value={feieUkey}
+              onChange={(e) => setFeieUkey(e.target.value)}
+            />
+            <p className="form-hint">{t('dashboard.feieUkeyHint')}</p>
+          </div>
           <div className="form-field">
             <label>{t('dashboard.webhookUrl')}</label>
             <input

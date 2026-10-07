@@ -85,7 +85,10 @@ export class CompanyService {
 
   async getOne(userId: string, companyId: string) {
     await this.assertMember(userId, companyId);
-    const company = await this.companyModel.findById(companyId).lean();
+    const role = await this.resolveRole(userId, companyId);
+    const query = this.companyModel.findById(companyId);
+    if (role === 'admin') query.select('+feieUkey');
+    const company = await query.lean();
     if (!company) throw new NotFoundException('Company not found');
     return company;
   }
@@ -456,9 +459,12 @@ export class CompanyService {
     if (m.role !== 'admin') {
       throw new ForbiddenException('Only company admins can update settings');
     }
-    const company = await this.companyModel.findById(companyId);
+    const company = await this.companyModel.findById(companyId).select('+feieUkey');
     if (!company) throw new NotFoundException('Company not found');
 
+    // Feie account is shared by every store; each store keeps its own printer SN.
+    if (dto.feieUser !== undefined) company.feieUser = dto.feieUser.trim() || undefined;
+    if (dto.feieUkey !== undefined) company.feieUkey = dto.feieUkey.trim() || undefined;
     if (dto.webhookUrl !== undefined) {
       company.webhookUrl = dto.webhookUrl?.trim() || undefined;
     }

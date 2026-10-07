@@ -24,4 +24,28 @@ export class UpdateStoreProfileDto {
   @IsOptional()
   @IsBoolean()
   warehouseEnabled?: boolean;
+
+  /** Stripe publishable key (pk_test_… / pk_live_…). */
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  stripePublishableKey?: string;
+
+  /** Stripe secret or restricted key (sk_… / rk_…). */
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  stripeSecretKey?: string;
+
+  /** Stripe Terminal location id (tml_…). */
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  stripeLocationId?: string;
+
+  /** Feie printer SN for this store. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  feiePrinterSn?: string;
 }

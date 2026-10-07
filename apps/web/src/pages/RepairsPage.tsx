@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PageHeader } from '../components/ui/PageHeader';
+import { OrderPhotos } from '../components/repairs/OrderPhotos';
 import { api } from '../lib/api';
 
 function printRepairReceiptHtml(html: string): Promise<void> {
@@ -73,6 +74,7 @@ type WorkOrderRow = {
   expectedCompletionAt?: string;
   quotedPriceIncVat: number;
   notes?: string;
+  photoIds?: string[];
   completionResult?: 'successful' | 'failed';
 };
 
@@ -179,6 +181,12 @@ function WorkOrderCard({
           {wo.issueDescription}
         </div>
       )}
+      {wo.notes && (
+        <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)', whiteSpace: 'pre-wrap' }}>
+          {t('repairs.notes')}: {wo.notes}
+        </div>
+      )}
+      <OrderPhotos orderId={wo._id} photoIds={wo.photoIds} />
       {!compact && wo.repairLocation && (
         <div style={{ fontSize: '0.8125rem' }}>
           {t('repairs.repairLocation')}: {wo.repairLocation}

@@ -94,6 +94,12 @@ export const api = {
       localeOverrides?: Record<string, Record<string, unknown>>;
       enabledModules?: string[];
       subscriptionStatus?: string;
+      feieUser?: string;
+      feieUkey?: string;
+      webhookUrl?: string;
+      auditRetentionDays?: number;
+      inviteEmailNote?: string;
+      inviteEmailNoteZh?: string;
     }>(`/companies/${id}`),
 
   updateCompanyProfile: (
@@ -204,6 +210,8 @@ export const api = {
       auditRetentionDays?: number;
       inviteEmailNote?: string;
       inviteEmailNoteZh?: string;
+      feieUser?: string;
+      feieUkey?: string;
     },
   ) =>
     request(`/companies/${companyId}/settings`, {
@@ -340,6 +348,10 @@ export const api = {
       warehouseEnabled?: boolean;
       repairTerms?: string;
       salesTerms?: string;
+      stripePublishableKey?: string;
+      stripeSecretKey?: string;
+      stripeLocationId?: string;
+      feiePrinterSn?: string;
     }>(`/stores/${id}`),
 
   updateStoreProfile: (
@@ -350,10 +362,29 @@ export const api = {
       phone?: string;
       email?: string;
       warehouseEnabled?: boolean;
+      stripePublishableKey?: string;
+      stripeSecretKey?: string;
+      stripeLocationId?: string;
+      feiePrinterSn?: string;
     },
   ) =>
     request(`/stores/${id}/profile`, {
       method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+
+  testStoreFeie: (id: string, feiePrinterSn: string) =>
+    request<{ ok: true; status: string }>(`/stores/${id}/feie-test`, {
+      method: 'POST',
+      body: JSON.stringify({ feiePrinterSn }),
+    }),
+
+  testStoreStripe: (
+    id: string,
+    body: { stripePublishableKey: string; stripeSecretKey: string; stripeLocationId?: string },
+  ) =>
+    request<{ ok: true; mode: 'test' | 'live'; locationName?: string }>(`/stores/${id}/stripe-test`, {
+      method: 'POST',
       body: JSON.stringify(body),
     }),
 
@@ -393,11 +424,13 @@ export const api = {
     productType?: string;
     catalogCategoryId?: string;
     q?: string;
+    missingBarcode?: boolean;
   }) => {
     const q = new URLSearchParams();
     if (opts?.productType) q.set('productType', opts.productType);
     if (opts?.catalogCategoryId) q.set('catalogCategoryId', opts.catalogCategoryId);
     if (opts?.q?.trim()) q.set('q', opts.q.trim());
+    if (opts?.missingBarcode) q.set('missingBarcode', '1');
     const qs = q.toString();
     return request(`/products${qs ? `?${qs}` : ''}`);
   },
@@ -421,6 +454,7 @@ export const api = {
         variantValues: string[];
         costPrice: number;
         retailPrice?: number;
+        wholesalePrice?: number;
       }>;
     }>(`/products/${parentId}/variants`),
 
@@ -450,6 +484,7 @@ export const api = {
         variantValues: string[];
         costPrice: number;
         retailPrice?: number;
+        wholesalePrice?: number;
         skuCode?: string;
       }>;
     },

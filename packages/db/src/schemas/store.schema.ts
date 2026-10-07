@@ -28,6 +28,26 @@ export class Store {
   @Prop({ trim: true, maxlength: 4000 })
   salesTerms?: string;
 
+  /** Stripe publishable key (pk_…) for the iOS app. */
+  @Prop({ trim: true })
+  stripePublishableKey?: string;
+
+  /** Stripe secret or restricted key (sk_… / rk_…). Not returned in store lists. */
+  @Prop({ trim: true, select: false })
+  stripeSecretKey?: string;
+
+  /** Earlier single-key field. Read only so a saved value can move to stripeSecretKey. */
+  @Prop({ trim: true, select: false })
+  stripeApiKey?: string;
+
+  /** Stripe Terminal location id for this store (tml_…). */
+  @Prop({ trim: true })
+  stripeLocationId?: string;
+
+  /** Feie printer SN for this store. */
+  @Prop({ trim: true })
+  feiePrinterSn?: string;
+
   @Prop({ default: false })
   warehouseEnabled!: boolean;
 

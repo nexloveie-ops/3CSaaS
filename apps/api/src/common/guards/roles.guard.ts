@@ -24,6 +24,7 @@ const CASHIER_ALLOWED_RULES: { method: string; pattern: RegExp }[] = [
   { method: 'ANY', pattern: /^\/inventory(\/|$)/ },
   { method: 'ANY', pattern: /^\/transfers(\/|$)/ },
   { method: 'ANY', pattern: /^\/work-orders(\/|$)/ },
+  { method: 'ANY', pattern: /^\/buy-ins(\/|$)/ },
   { method: 'ANY', pattern: /^\/price-list(\/|$)/ },
   { method: 'ANY', pattern: /^\/preorders(\/|$)/ },
   { method: 'ANY', pattern: /^\/credit-notes(\/|$)/ },

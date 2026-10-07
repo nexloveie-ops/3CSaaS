@@ -37,12 +37,21 @@ export class SmsService {
       const msg = (await this.twilioClient.messages.create({
         body,
         from,
-        to: to.trim(),
+        to: this.toE164(to),
       })) as { sid: string };
       return { sent: true, sid: msg.sid };
     } catch (err) {
       this.logger.error(`SMS failed: ${(err as Error).message}`);
       return { sent: false };
     }
+  }
+
+  /** Twilio needs E.164. Local Irish numbers starting with 0 become +353. */
+  private toE164(raw: string): string {
+    const compact = raw.trim().replace(/[\s()-]/g, '');
+    if (compact.startsWith('+')) return compact;
+    if (compact.startsWith('00')) return `+${compact.slice(2)}`;
+    if (compact.startsWith('0')) return `+353${compact.slice(1)}`;
+    return `+${compact}`;
   }
 }

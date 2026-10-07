@@ -10,8 +10,10 @@ export type ProductEditRow = {
   nameEn?: string;
   productType: string;
   costPrice: number;
+  wholesalePrice?: number | null;
   retailPrice?: number;
   skuCode?: string;
+  barcode?: string;
   catalogCategoryId?: { _id: string; name: string } | string | null;
   taxCategoryId?: { _id: string; name: string } | string;
   variantDimensions?: { name: string; values: string[] }[];
@@ -51,10 +53,14 @@ export function EditProductModal({ product, onClose, onManageVariants }: Props) 
   const [catalogCategoryId, setCatalogCategoryId] = useState(refId(product.catalogCategoryId));
   const [taxCategoryId, setTaxCategoryId] = useState(refId(product.taxCategoryId));
   const [costPrice, setCostPrice] = useState(String(product.costPrice));
+  const [wholesalePrice, setWholesalePrice] = useState(
+    product.wholesalePrice != null ? String(product.wholesalePrice) : '',
+  );
   const [retailPrice, setRetailPrice] = useState(
     product.retailPrice != null ? String(product.retailPrice) : '',
   );
   const [skuCode, setSkuCode] = useState(product.skuCode ?? '');
+  const [barcode, setBarcode] = useState(product.barcode ?? '');
 
   const hasVariants =
     product.productType === 'simple' && !!product.variantDimensions?.length;
@@ -75,8 +81,10 @@ export function EditProductModal({ product, onClose, onManageVariants }: Props) 
     setCatalogCategoryId(refId(product.catalogCategoryId));
     setTaxCategoryId(refId(product.taxCategoryId));
     setCostPrice(String(product.costPrice));
+    setWholesalePrice(product.wholesalePrice != null ? String(product.wholesalePrice) : '');
     setRetailPrice(product.retailPrice != null ? String(product.retailPrice) : '');
     setSkuCode(product.skuCode ?? '');
+    setBarcode(product.barcode ?? '');
   }, [product]);
 
   const save = useMutation({
@@ -87,8 +95,11 @@ export function EditProductModal({ product, onClose, onManageVariants }: Props) 
         catalogCategoryId: catalogCategoryId || null,
         taxCategoryId: taxCategoryId || undefined,
         costPrice: Number(costPrice),
+        wholesalePrice: wholesalePrice.trim() === '' ? null : Number(wholesalePrice),
         retailPrice: retailPrice ? Number(retailPrice) : undefined,
-        ...(product.productType === 'sku' ? { skuCode: skuCode.trim() || undefined } : {}),
+        ...(product.productType === 'sku'
+          ? { skuCode: skuCode.trim() || undefined, barcode: barcode.trim() }
+          : {}),
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['products'] });
@@ -142,14 +153,24 @@ export function EditProductModal({ product, onClose, onManageVariants }: Props) 
             />
           </label>
           {product.productType === 'sku' && (
-            <label className="form-field preorder-form__full">
-              <span>{t('inventory.skuCode')}</span>
-              <input
-                value={skuCode}
-                onChange={(e) => setSkuCode(e.target.value)}
-                autoComplete="off"
-              />
-            </label>
+            <>
+              <label className="form-field preorder-form__full">
+                <span>{t('inventory.skuCode')}</span>
+                <input
+                  value={skuCode}
+                  onChange={(e) => setSkuCode(e.target.value)}
+                  autoComplete="off"
+                />
+              </label>
+              <label className="form-field preorder-form__full">
+                <span>{t('products.barcode')}</span>
+                <input
+                  value={barcode}
+                  onChange={(e) => setBarcode(e.target.value)}
+                  autoComplete="off"
+                />
+              </label>
+            </>
           )}
           <label className="form-field preorder-form__full">
             <span>{t('products.catalogCategory')}</span>
@@ -175,6 +196,16 @@ export function EditProductModal({ product, onClose, onManageVariants }: Props) 
                 value={costPrice}
                 onChange={(e) => setCostPrice(e.target.value)}
                 required
+              />
+            </label>
+            <label className="form-field">
+              <span>{t('products.wholesalePrice')}</span>
+              <input
+                type="number"
+                step="0.01"
+                min={0}
+                value={wholesalePrice}
+                onChange={(e) => setWholesalePrice(e.target.value)}
               />
             </label>
             <label className="form-field">

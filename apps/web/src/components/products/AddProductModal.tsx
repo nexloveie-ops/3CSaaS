@@ -25,7 +25,10 @@ export function AddProductModal({ categoryId, categoryName, onClose, onCreated }
   const [nameEn, setNameEn] = useState('');
   const [productType, setProductType] = useState('simple');
   const [costPrice, setCostPrice] = useState('0');
+  const [wholesalePrice, setWholesalePrice] = useState('');
   const [retailPrice, setRetailPrice] = useState('');
+  const [skuCode, setSkuCode] = useState('');
+  const [barcode, setBarcode] = useState('');
   const [taxCategoryId, setTaxCategoryId] = useState('');
   const [hasVariants, setHasVariants] = useState(false);
   const [variantDims, setVariantDims] = useState([{ name: '', valuesText: '' }]);
@@ -55,7 +58,10 @@ export function AddProductModal({ categoryId, categoryName, onClose, onCreated }
         productType,
         catalogCategoryId: categoryId,
         costPrice: Number(costPrice),
+        wholesalePrice: wholesalePrice.trim() === '' ? undefined : Number(wholesalePrice),
         retailPrice: retailPrice ? Number(retailPrice) : undefined,
+        skuCode: productType === 'sku' ? skuCode.trim() : undefined,
+        barcode: productType === 'sku' ? barcode.trim() || undefined : undefined,
         taxCategoryId: taxId,
         variantDimensions: parsedDims.length ? parsedDims : undefined,
       })) as { _id: string };
@@ -136,6 +142,27 @@ export function AddProductModal({ categoryId, categoryName, onClose, onCreated }
           {productType === 'serialized' && (
             <p className="products-serial-panel__hint muted">{t('products.serialAddAfterCreate')}</p>
           )}
+          {productType === 'sku' && (
+            <>
+              <label className="form-field preorder-form__full">
+                <span>{t('inventory.skuCode')}</span>
+                <input
+                  value={skuCode}
+                  onChange={(e) => setSkuCode(e.target.value)}
+                  required
+                  autoComplete="off"
+                />
+              </label>
+              <label className="form-field preorder-form__full">
+                <span>{t('products.barcode')}</span>
+                <input
+                  value={barcode}
+                  onChange={(e) => setBarcode(e.target.value)}
+                  autoComplete="off"
+                />
+              </label>
+            </>
+          )}
           <div className="preorder-form__row">
             <label className="form-field">
               <span>{t('products.costPreTax')}</span>
@@ -145,6 +172,16 @@ export function AddProductModal({ categoryId, categoryName, onClose, onCreated }
                 value={costPrice}
                 onChange={(e) => setCostPrice(e.target.value)}
                 required
+              />
+            </label>
+            <label className="form-field">
+              <span>{t('products.wholesalePrice')}</span>
+              <input
+                type="number"
+                step="0.01"
+                min={0}
+                value={wholesalePrice}
+                onChange={(e) => setWholesalePrice(e.target.value)}
               />
             </label>
             <label className="form-field">

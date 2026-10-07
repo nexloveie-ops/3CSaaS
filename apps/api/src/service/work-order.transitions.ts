@@ -21,7 +21,6 @@ export function canTransition(
   return map[from]?.includes(to) ?? false;
 }
 
-export const SMS_ON_ENTER: Record<string, 'price_confirm' | 'ready'> = {
-  awaiting_payment: 'price_confirm',
-  completed: 'ready',
+export const SMS_ON_ENTER: Record<string, 'ready'> = {
+  awaiting_payment: 'ready',
 };

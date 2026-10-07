@@ -34,6 +34,7 @@ export class ProductController {
     @Query('productType') productType?: string,
     @Query('catalogCategoryId') catalogCategoryId?: string,
     @Query('q') q?: string,
+    @Query('missingBarcode') missingBarcode?: string,
   ) {
     return this.productService.list(
       user.userId,
@@ -42,6 +43,7 @@ export class ProductController {
       catalogCategoryId,
       q,
       storeId,
+      missingBarcode,
     );
   }
 

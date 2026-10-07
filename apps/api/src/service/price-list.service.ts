@@ -312,6 +312,129 @@ export class PriceListService {
     return { saved };
   }
 
+  /**
+   * Keep the price list in step with a repair order.
+   * New brand, model, or issue text is stored for the next intake.
+   * A quoted price writes or updates the brand + model + issue row.
+   */
+  async rememberOrderQuote(
+    companyId: string,
+    input: { brand?: string; model?: string; issue?: string; price?: number },
+  ): Promise<Types.ObjectId | null> {
+    const cid = new Types.ObjectId(companyId);
+    const brandName = input.brand?.trim() ?? '';
+    const modelName = input.model?.trim() ?? '';
+    const issueName = input.issue?.trim() ?? '';
+    const price =
+      input.price != null && Number.isFinite(input.price) && input.price >= 0
+        ? Math.round(input.price * 100) / 100
+        : undefined;
+
+    const brand = brandName ? await this.ensureBrand(cid, brandName) : null;
+    const model =
+      brand && modelName ? await this.ensureDeviceModel(cid, brand._id, modelName) : null;
+    if (issueName) await this.ensureIssueLabel(cid, issueName);
+
+    if (!brand || !model || !issueName || price == null) return null;
+
+    const tax = await this.taxModel.findOne({ companyId: cid, isActive: true }).lean();
+    const existing = await this.priceModel.findOne({
+      companyId: cid,
+      modelId: model._id,
+      issue: this.exact(issueName),
+      isActive: true,
+    });
+    const issue = existing?.issue ?? issueName;
+    const name = formatPriceListLabel(brand.name, model.name, issue);
+    const set: Record<string, unknown> = {
+      companyId: cid,
+      modelId: model._id,
+      brand: brand.name,
+      model: model.name,
+      issue,
+      name,
+      priceIncVat: price,
+      isActive: true,
+    };
+    if (tax) set.taxCategoryId = tax._id;
+    else if (!existing?.taxCategoryId) return null;
+
+    const saved = await this.priceModel.findOneAndUpdate(
+      { companyId: cid, modelId: model._id, issue },
+      { $set: set },
+      { upsert: true, new: true },
+    );
+    return saved?._id ?? null;
+  }
+
+  private exact(value: string) {
+    return { $regex: new RegExp(`^${value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') };
+  }
+
+  private async ensureBrand(companyId: Types.ObjectId, name: string) {
+    const found = await this.brandModel.findOne({ companyId, name: this.exact(name) });
+    if (found) return found;
+    const last = await this.brandModel.findOne({ companyId }).sort({ sortOrder: -1 }).lean();
+    try {
+      return await this.brandModel.create({
+        companyId,
+        name,
+        sortOrder: (last?.sortOrder ?? 0) + 1,
+      });
+    } catch {
+      return this.brandModel.findOne({ companyId, name: this.exact(name) });
+    }
+  }
+
+  private async ensureDeviceModel(
+    companyId: Types.ObjectId,
+    brandId: Types.ObjectId,
+    name: string,
+  ) {
+    const found = await this.catalogDeviceModel.findOne({
+      companyId,
+      brandId,
+      name: this.exact(name),
+    });
+    if (found) return found;
+    const last = await this.catalogDeviceModel
+      .findOne({ companyId, brandId })
+      .sort({ sortOrder: -1 })
+      .lean();
+    try {
+      return await this.catalogDeviceModel.create({
+        companyId,
+        brandId,
+        name,
+        sortOrder: (last?.sortOrder ?? 0) + 1,
+      });
+    } catch {
+      return this.catalogDeviceModel.findOne({ companyId, brandId, name: this.exact(name) });
+    }
+  }
+
+  private async ensureIssueLabel(companyId: Types.ObjectId, label: string) {
+    const found = await this.issueTemplateModel.findOne({
+      companyId,
+      label: this.exact(label),
+    });
+    if (found) return found;
+    const last = await this.issueTemplateModel
+      .findOne({ companyId })
+      .sort({ sortOrder: -1 })
+      .lean();
+    try {
+      return await this.issueTemplateModel.create({
+        companyId,
+        label,
+        kind: 'custom',
+        sortOrder: (last?.sortOrder ?? 0) + 1,
+      });
+    } catch {
+      return this.issueTemplateModel.findOne({ companyId, label: this.exact(label) });
+    }
+  }
+
   /** Flat list for repairs dropdown and legacy clients. */
   async list(userId: string, companyId: string): Promise<
     {
