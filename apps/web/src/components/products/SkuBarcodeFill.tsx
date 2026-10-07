@@ -162,7 +162,7 @@ function SkuBarcodeModal({
             <button
               type="button"
               className="btn btn-secondary"
-              onClick={() => (cameraOn ? stopCamera() : void startCamera())}
+              onClick={() => (cameraOn ? stopCamera() : setCameraOn(true))}
             >
               {cameraOn ? t('products.fillBarcodeStop') : t('products.fillBarcodeScan')}
             </button>
