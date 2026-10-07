@@ -1,6 +1,6 @@
 import { randomBytes } from 'crypto';
-import { mkdir, readFile, writeFile } from 'fs/promises';
-import { join, resolve, sep } from 'path';
+import { readFile } from 'fs/promises';
+import { resolve, sep } from 'path';
 import {
   BadRequestException,
   Injectable,
@@ -28,6 +28,7 @@ import {
 import { formatPriceListLabel, PriceListService } from './price-list.service';
 import { DocumentSequenceService } from '../common/services/document-sequence.service';
 import { CompanyService } from '../company/company.service';
+import { FileStorageService } from '../storage/file-storage.service';
 import { SmsService } from '../notification/sms.service';
 import { FeiePrintService } from '../printing/feie-print.service';
 import { renderRepairTickets } from '../printing/tickets';
@@ -56,6 +57,7 @@ export class WorkOrderService {
     private sms: SmsService,
     private receiptService: WorkOrderReceiptService,
     private feie: FeiePrintService,
+    private storage: FileStorageService,
   ) {}
 
   async list(
@@ -522,9 +524,11 @@ export class WorkOrderService {
       throw new BadRequestException('Photo must be a JPEG');
     }
     const photoId = randomBytes(12).toString('hex');
-    const file = this.photoFile(companyId, wo._id.toString(), photoId);
-    await mkdir(join(file, '..'), { recursive: true });
-    await writeFile(file, jpeg);
+    await this.storage.save(
+      this.photoKey(companyId, wo._id.toString(), photoId),
+      jpeg,
+      'image/jpeg',
+    );
     wo.photoIds = [...(wo.photoIds ?? []), photoId];
     await wo.save();
     return { photoId };
@@ -539,21 +543,37 @@ export class WorkOrderService {
     if (!wo) throw new NotFoundException('Work order not found');
     if (!wo.photoIds?.includes(photoId)) throw new NotFoundException('Photo not found');
     try {
-      return await readFile(this.photoFile(companyId, id, photoId));
+      return await this.readPhotoBytes(companyId, id, photoId);
     } catch {
       throw new NotFoundException('Photo not found');
     }
   }
 
-  private photoFile(companyId: string, orderId: string, photoId: string) {
-    if (!/^[a-f0-9]{24}$/.test(companyId) || !/^[a-f0-9]{24}$/.test(orderId)) {
-      throw new BadRequestException('Invalid work order');
-    }
-    if (!/^[a-f0-9]{24}$/.test(photoId)) throw new BadRequestException('Invalid photo');
+  /** gs://3cios/repair/{company}/{order}/{photo}.jpg */
+  private photoKey(companyId: string, orderId: string, photoId: string) {
+    this.assertPhotoIds(companyId, orderId, photoId);
+    return `repair/${companyId}/${orderId}/${photoId}.jpg`;
+  }
+
+  private async readPhotoBytes(companyId: string, orderId: string, photoId: string) {
+    const stored = await this.storage.read(this.photoKey(companyId, orderId, photoId));
+    if (stored) return stored;
+    return readFile(this.legacyPhotoFile(companyId, orderId, photoId));
+  }
+
+  private legacyPhotoFile(companyId: string, orderId: string, photoId: string) {
+    this.assertPhotoIds(companyId, orderId, photoId);
     const root = resolve(process.cwd(), 'data', 'work-order-photos');
     const file = resolve(root, companyId, orderId, `${photoId}.jpg`);
     if (!file.startsWith(root + sep)) throw new BadRequestException('Invalid photo');
     return file;
+  }
+
+  private assertPhotoIds(companyId: string, orderId: string, photoId: string) {
+    if (!/^[a-f0-9]{24}$/.test(companyId) || !/^[a-f0-9]{24}$/.test(orderId)) {
+      throw new BadRequestException('Invalid work order');
+    }
+    if (!/^[a-f0-9]{24}$/.test(photoId)) throw new BadRequestException('Invalid photo');
   }
 
   private async photoDataUrls(wo: {
@@ -564,8 +584,10 @@ export class WorkOrderService {
     const urls: string[] = [];
     for (const photoId of wo.photoIds ?? []) {
       try {
-        const bytes = await readFile(
-          this.photoFile(wo.companyId.toString(), wo._id.toString(), photoId),
+        const bytes = await this.readPhotoBytes(
+          wo.companyId.toString(),
+          wo._id.toString(),
+          photoId,
         );
         urls.push(`data:image/jpeg;base64,${bytes.toString('base64')}`);
       } catch {
