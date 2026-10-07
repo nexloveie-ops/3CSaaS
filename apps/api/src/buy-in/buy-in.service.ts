@@ -87,6 +87,24 @@ export class BuyInService {
     return this.buyInModel.find(filter).sort({ createdAt: -1 }).lean();
   }
 
+  async history(userId: string, companyId: string, storeId: string, q: string) {
+    await this.companyService.assertStoreAccess(userId, companyId, storeId);
+    const query = q.trim();
+    if (!query) return [];
+    const rows = await this.buyInModel
+      .find({
+        companyId: new Types.ObjectId(companyId),
+        storeId: new Types.ObjectId(storeId),
+        status: { $in: ['pending_inspection', 'stocked'] },
+      })
+      .sort({ createdAt: -1 })
+      .limit(1000)
+      .lean();
+    const folded = query.toLowerCase();
+    const digits = query.replace(/\D/g, '');
+    return rows.filter((row) => this.matchesHistory(row, folded, digits)).slice(0, 80);
+  }
+
   async get(userId: string, companyId: string, id: string) {
     await this.companyService.assertMember(userId, companyId);
     const row = await this.buyInModel
@@ -265,10 +283,39 @@ export class BuyInService {
       capacity: dto.capacity.trim(),
       color: dto.color.trim(),
       imeiSn: dto.imeiSn.trim(),
+      customerName: dto.customerName.trim(),
+      customerPhone: dto.customerPhone.trim(),
       buyPrice: dto.buyPrice,
       notes: dto.notes?.trim() || undefined,
       paymentMethod: dto.paymentMethod,
     };
+  }
+
+  private matchesHistory(
+    row: {
+      brand?: string;
+      model?: string;
+      capacity?: string;
+      color?: string;
+      notes?: string;
+      imeiSn?: string;
+      customerName?: string;
+      customerPhone?: string;
+    },
+    folded: string,
+    digits: string,
+  ) {
+    const description = [row.brand, row.model, row.capacity, row.color, row.notes]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase();
+    if (description.includes(folded)) return true;
+    if ((row.customerName ?? '').toLowerCase().includes(folded)) return true;
+    const imei = (row.imeiSn ?? '').toLowerCase();
+    if (imei.includes(folded)) return true;
+    if (digits.length >= 5 && imei.replace(/\D/g, '').includes(digits)) return true;
+    const phone = (row.customerPhone ?? '').replace(/\D/g, '');
+    return digits.length >= 3 && phone.includes(digits);
   }
 
   private async findDraft(companyId: string, id: string) {

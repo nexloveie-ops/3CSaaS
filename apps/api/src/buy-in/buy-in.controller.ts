@@ -40,6 +40,16 @@ export class BuyInController {
     return this.service.list(user.userId, companyId, storeId, status);
   }
 
+  @Get('history')
+  history(
+    @CurrentUser() user: { userId: string },
+    @Headers('x-company-id') companyId: string,
+    @Headers('x-store-id') storeId: string,
+    @Query('q') q = '',
+  ) {
+    return this.service.history(user.userId, companyId, storeId, q);
+  }
+
   @Post()
   create(
     @CurrentUser() user: { userId: string },

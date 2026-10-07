@@ -26,6 +26,12 @@ export class BuyIn {
   @Prop({ required: true, trim: true })
   imeiSn!: string;
 
+  @Prop({ required: true, trim: true })
+  customerName!: string;
+
+  @Prop({ required: true, trim: true })
+  customerPhone!: string;
+
   @Prop({ required: true, min: 0 })
   buyPrice!: number;
 

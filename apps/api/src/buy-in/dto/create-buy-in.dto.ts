@@ -21,6 +21,14 @@ export class CreateBuyInDto {
   @MinLength(1)
   imeiSn!: string;
 
+  @IsString()
+  @MinLength(1)
+  customerName!: string;
+
+  @IsString()
+  @MinLength(1)
+  customerPhone!: string;
+
   @IsNumber()
   @Min(0)
   buyPrice!: number;
