@@ -21,9 +21,10 @@ import {
   TaxCategoryDocument,
 } from '@lz3c/db';
 import { Model, Types } from 'mongoose';
-import { mkdir, readFile, writeFile } from 'fs/promises';
-import { join, resolve, sep } from 'path';
+import { readFile } from 'fs/promises';
+import { resolve, sep } from 'path';
 import { CompanyService } from '../company/company.service';
+import { FileStorageService } from '../storage/file-storage.service';
 import { CreateBuyInDto } from './dto/create-buy-in.dto';
 import { StockInBuyInDto } from './dto/stock-in-buy-in.dto';
 
@@ -42,6 +43,7 @@ export class BuyInService {
     @InjectModel(InventoryPosition.name)
     private positionModel: Model<InventoryPositionDocument>,
     private companyService: CompanyService,
+    private storage: FileStorageService,
   ) {}
 
   async create(
@@ -109,9 +111,7 @@ export class BuyInService {
     if (jpeg.length < 32 || jpeg.length > 2_500_000 || jpeg[0] !== 0xff || jpeg[1] !== 0xd8) {
       throw new BadRequestException('Photo must be a JPEG');
     }
-    const file = this.photoFile(companyId, id, slot);
-    await mkdir(join(file, '..'), { recursive: true });
-    await writeFile(file, jpeg);
+    await this.storage.save(this.photoKey(companyId, id, slot), jpeg, 'image/jpeg');
     const slots = new Set(row.photoSlots ?? []);
     slots.add(slot);
     row.photoSlots = [...slots].sort((a, b) => a - b);
@@ -127,7 +127,13 @@ export class BuyInService {
       .lean();
     if (!row) throw new NotFoundException('Buy-in not found');
     if (!row.photoSlots?.includes(slot)) throw new NotFoundException('Photo not found');
-    return readFile(this.photoFile(companyId, id, slot));
+    const stored = await this.storage.read(this.photoKey(companyId, id, slot));
+    if (stored) return stored;
+    try {
+      return await readFile(this.legacyPhotoFile(companyId, id, slot));
+    } catch {
+      throw new NotFoundException('Photo not found');
+    }
   }
 
   async complete(userId: string, companyId: string, id: string) {
@@ -277,16 +283,26 @@ export class BuyInService {
     return row;
   }
 
-  private photoFile(companyId: string, id: string, slot: number) {
+  /** gs://3cios/buyin/{company}/{buy-in}/{slot}.jpg — bucket name comes from GCS_BUCKET. */
+  private photoKey(companyId: string, id: string, slot: number) {
+    this.assertPhotoIds(companyId, id, slot);
+    return `buyin/${companyId}/${id}/${slot}.jpg`;
+  }
+
+  private legacyPhotoFile(companyId: string, id: string, slot: number) {
+    this.assertPhotoIds(companyId, id, slot);
+    const root = resolve(process.cwd(), 'data', 'buy-in-photos');
+    const file = resolve(root, companyId, id, `${slot}.jpg`);
+    if (!file.startsWith(root + sep)) throw new BadRequestException('Invalid photo');
+    return file;
+  }
+
+  private assertPhotoIds(companyId: string, id: string, slot: number) {
     if (!/^[a-f0-9]{24}$/.test(companyId) || !/^[a-f0-9]{24}$/.test(id)) {
       throw new BadRequestException('Invalid buy-in');
     }
     if (!SLOTS.includes(slot as (typeof SLOTS)[number])) {
       throw new BadRequestException('Invalid photo');
     }
-    const root = resolve(process.cwd(), 'data', 'buy-in-photos');
-    const file = resolve(root, companyId, id, `${slot}.jpg`);
-    if (!file.startsWith(root + sep)) throw new BadRequestException('Invalid photo');
-    return file;
   }
 }
