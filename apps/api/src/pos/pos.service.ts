@@ -775,12 +775,7 @@ export class PosService {
       }
 
       if (r.line.workOrderId) {
-        const wo = await this.woModel.findById(r.line.workOrderId);
-        if (wo && wo.status === 'completed') {
-          wo.status = 'awaiting_payment';
-          wo.paymentOrderId = undefined;
-          await wo.save();
-        }
+        await this.finishRefundedWorkOrder(r.line.workOrderId);
       }
     }
 
@@ -919,12 +914,7 @@ export class PosService {
         );
       }
       if (row.line.workOrderId) {
-        const wo = await this.woModel.findById(row.line.workOrderId);
-        if (wo && wo.status === 'completed') {
-          wo.status = 'awaiting_payment';
-          wo.paymentOrderId = undefined;
-          await wo.save();
-        }
+        await this.finishRefundedWorkOrder(row.line.workOrderId);
       }
     }
     order.markModified('lines');
@@ -1008,6 +998,14 @@ export class PosService {
         };
       })
       .filter((line) => line.lineTotalIncVat > 0);
+  }
+
+  /** A refunded repair stays finished and must not return to the sales queue. */
+  private async finishRefundedWorkOrder(workOrderId: Types.ObjectId) {
+    const wo = await this.woModel.findById(workOrderId);
+    if (!wo || wo.status !== 'awaiting_payment') return;
+    wo.status = 'completed';
+    await wo.save();
   }
 
   private async remainingRefundable(orderId: Types.ObjectId, totalIncVat: number) {
