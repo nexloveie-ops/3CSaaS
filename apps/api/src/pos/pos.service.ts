@@ -190,17 +190,100 @@ export class PosService {
       storePhone: store?.phone,
       docNumber: order.docNumber,
       businessDate: order.businessDate ?? new Date().toISOString().slice(0, 10),
-      lines: order.lines.map((l) => ({
-        productName: l.productName,
-        quantity: l.quantity,
-        lineTotalIncVat: l.lineTotalIncVat,
-        sn: l.sn,
-      })),
+      lines: await this.saleTicketLines(companyId, order.lines),
       totalIncVat: order.totalIncVat,
-      paymentLines: buildReceiptPaymentLines(order),
+      payment: {
+        method: order.paymentMethod,
+        cashAmount: order.cashAmount ?? 0,
+        cardAmount: order.cardAmount ?? 0,
+        amountTendered: order.amountTendered,
+        changeGiven: order.changeGiven,
+      },
       salesTerms: store?.salesTerms,
     });
     return this.feie.print(companyId, storeId, content);
+  }
+
+  /** Repair lines and variant rows need fields that are not stored on the order line. */
+  private async saleTicketLines(
+    companyId: string,
+    lines: {
+      productId?: Types.ObjectId;
+      productName: string;
+      quantity: number;
+      unitPriceIncVat: number;
+      lineTotalIncVat: number;
+      sn?: string;
+      workOrderId?: Types.ObjectId;
+    }[],
+  ) {
+    const workOrderIds = lines
+      .map((line) => line.workOrderId)
+      .filter((id): id is Types.ObjectId => !!id);
+    const productIds = lines
+      .map((line) => line.productId)
+      .filter((id): id is Types.ObjectId => !!id);
+    const [workOrders, products] = await Promise.all([
+      workOrderIds.length
+        ? this.woModel
+            .find({ _id: { $in: workOrderIds } })
+            .select('docNumber deviceBrand deviceModel issueDescription')
+            .lean()
+        : [],
+      productIds.length
+        ? this.productModel
+            .find({
+              _id: { $in: productIds },
+              companyId: new Types.ObjectId(companyId),
+            })
+            .select('name parentProductId variantValues')
+            .lean()
+        : [],
+    ]);
+    const parentIds = products
+      .map((product) => product.parentProductId)
+      .filter((id): id is Types.ObjectId => !!id);
+    const parents = parentIds.length
+      ? await this.productModel.find({ _id: { $in: parentIds } }).select('name').lean()
+      : [];
+    const workOrderById = new Map(workOrders.map((order) => [String(order._id), order]));
+    const productById = new Map(products.map((product) => [String(product._id), product]));
+    const parentById = new Map(parents.map((product) => [String(product._id), product]));
+
+    return lines.map((line) => {
+      if (line.workOrderId) {
+        const workOrder = workOrderById.get(String(line.workOrderId));
+        const model = [workOrder?.deviceBrand, workOrder?.deviceModel]
+          .map((part) => part?.trim())
+          .filter(Boolean)
+          .join(' ');
+        return {
+          repair: {
+            docNumber: workOrder?.docNumber || line.productName,
+            model,
+            issue: workOrder?.issueDescription?.trim() || '',
+          },
+          quantity: line.quantity,
+          unitPriceIncVat: line.unitPriceIncVat,
+          lineTotalIncVat: line.lineTotalIncVat,
+        };
+      }
+      const product = line.productId ? productById.get(String(line.productId)) : undefined;
+      const parent = product?.parentProductId
+        ? parentById.get(String(product.parentProductId))
+        : undefined;
+      const variants = (product?.variantValues ?? [])
+        .map((value) => value.trim())
+        .filter(Boolean);
+      return {
+        description: parent?.name || product?.name || line.productName,
+        variants: variants.length ? variants.join(' · ') : undefined,
+        sn: line.sn,
+        quantity: line.quantity,
+        unitPriceIncVat: line.unitPriceIncVat,
+        lineTotalIncVat: line.lineTotalIncVat,
+      };
+    });
   }
 
   private async renderB2bInvoiceHtml(
