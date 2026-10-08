@@ -107,6 +107,7 @@ export class BuyInService {
 
   async get(userId: string, companyId: string, id: string) {
     await this.companyService.assertMember(userId, companyId);
+    if (!Types.ObjectId.isValid(id)) throw new NotFoundException('Buy-in not found');
     const row = await this.buyInModel
       .findOne({ _id: id, companyId: new Types.ObjectId(companyId) })
       .lean();

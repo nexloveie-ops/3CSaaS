@@ -211,6 +211,8 @@ struct BuyInRow: Decodable, Identifiable {
     let capacity: String
     let color: String
     let imeiSn: String
+    let customerName: String?
+    let customerPhone: String?
     let buyPrice: Double
     let notes: String?
     let paymentMethod: String

@@ -1,3 +1,4 @@
+import PhotosUI
 import SwiftUI
 import UIKit
 
@@ -11,6 +12,8 @@ struct RepairsView: View {
     @State private var notes = ""
     @State private var intakePhotos: [IntakePhoto] = []
     @State private var showCamera = false
+    @State private var showLibrary = false
+    @State private var photoChooser = false
     @State private var brand = ""
     @State private var brandId = ""
     @State private var deviceModel = ""
@@ -166,12 +169,11 @@ struct RepairsView: View {
                             if intakePhotos.count < 6 {
                                 Button {
                                     field = nil
-                                    showCamera = true
+                                    photoChooser = true
                                 } label: {
                                     Label(language.t("repair.addPhoto"), systemImage: "camera")
                                         .font(.subheadline.weight(.semibold))
                                 }
-                                .disabled(!UIImagePickerController.isSourceTypeAvailable(.camera))
                             }
                         }
                     }
@@ -296,11 +298,28 @@ struct RepairsView: View {
             }
             .environmentObject(language)
         }
+        .confirmationDialog(
+            "",
+            isPresented: $photoChooser,
+            titleVisibility: .hidden
+        ) {
+            Button(language.t("buy.takePhoto")) { showCamera = true }
+            Button(language.t("buy.fromPhotos")) { showLibrary = true }
+            Button(language.t("pos.cancel"), role: .cancel) {}
+        }
         .fullScreenCover(isPresented: $showCamera) {
-            CameraCapture { image in
+            RepairCameraCapture { image in
                 guard intakePhotos.count < 6 else { return }
                 intakePhotos.append(IntakePhoto(image: image))
             }
+            .ignoresSafeArea()
+        }
+        .fullScreenCover(isPresented: $showLibrary) {
+            RepairLibraryCapture { image in
+                guard intakePhotos.count < 6 else { return }
+                intakePhotos.append(IntakePhoto(image: image))
+            }
+            .ignoresSafeArea()
         }
         .sheet(item: $detail) { order in
             RepairPriceSheet(order: order) { price, issue in
@@ -723,7 +742,7 @@ struct OrderNotes: View {
     }
 }
 
-private struct ZoomShot: Identifiable {
+struct ZoomShot: Identifiable {
     let id: String
     let image: UIImage
 }
@@ -791,7 +810,7 @@ private enum OrderPhotoCache {
     static let images = NSCache<NSString, UIImage>()
 }
 
-private struct PhotoZoom: View {
+struct PhotoZoom: View {
     let image: UIImage
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var language: LanguageStore
@@ -839,35 +858,137 @@ private struct PhotoZoom: View {
     }
 }
 
-private struct CameraCapture: UIViewControllerRepresentable {
+private struct RepairCameraCapture: UIViewControllerRepresentable {
     var onImage: (UIImage) -> Void
     @Environment(\.dismiss) private var dismiss
 
-    func makeCoordinator() -> Coordinator { Coordinator(self) }
-
-    func makeUIViewController(context: Context) -> UIImagePickerController {
-        let picker = UIImagePickerController()
-        picker.sourceType = .camera
-        picker.cameraCaptureMode = .photo
-        picker.delegate = context.coordinator
-        return picker
+    func makeUIViewController(context: Context) -> RepairCameraHost {
+        let host = RepairCameraHost()
+        host.onImage = onImage
+        host.onCancel = { dismiss() }
+        return host
     }
 
-    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
+    func updateUIViewController(_ host: RepairCameraHost, context: Context) {
+        host.onImage = onImage
+        host.onCancel = { dismiss() }
+    }
+}
 
-    final class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
-        let parent: CameraCapture
-        init(_ parent: CameraCapture) { self.parent = parent }
+private struct RepairLibraryCapture: UIViewControllerRepresentable {
+    var onImage: (UIImage) -> Void
+    @Environment(\.dismiss) private var dismiss
 
-        func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
-            if let image = info[.originalImage] as? UIImage {
-                parent.onImage(image)
-            }
-            parent.dismiss()
+    func makeUIViewController(context: Context) -> RepairLibraryHost {
+        let host = RepairLibraryHost()
+        host.onImage = onImage
+        host.onCancel = { dismiss() }
+        return host
+    }
+
+    func updateUIViewController(_ host: RepairLibraryHost, context: Context) {
+        host.onImage = onImage
+        host.onCancel = { dismiss() }
+    }
+}
+
+final class FullScreenCameraPicker: UIImagePickerController {
+    override var prefersStatusBarHidden: Bool { true }
+    override var preferredStatusBarStyle: UIStatusBarStyle { .lightContent }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        view.backgroundColor = .black
+        guard let window = view.window else { return }
+        if view.frame != window.bounds {
+            view.frame = window.bounds
         }
+    }
+}
 
-        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
-            parent.dismiss()
+private final class RepairCameraHost: UIViewController, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
+    var onImage: ((UIImage) -> Void)?
+    var onCancel: (() -> Void)?
+    private var started = false
+
+    override var prefersStatusBarHidden: Bool { true }
+    override var preferredStatusBarStyle: UIStatusBarStyle { .lightContent }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        view.backgroundColor = .black
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        guard !started else { return }
+        started = true
+        let picker = FullScreenCameraPicker()
+        picker.sourceType = .camera
+        picker.cameraCaptureMode = .photo
+        picker.delegate = self
+        picker.modalPresentationStyle = .fullScreen
+        picker.modalPresentationCapturesStatusBarAppearance = true
+        picker.view.backgroundColor = .black
+        picker.edgesForExtendedLayout = .all
+        let bar = picker.navigationBar
+        bar.barStyle = .black
+        bar.isTranslucent = true
+        bar.tintColor = .white
+        bar.barTintColor = .black
+        present(picker, animated: false)
+    }
+
+    func imagePickerController(
+        _ picker: UIImagePickerController,
+        didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]
+    ) {
+        if let image = info[.originalImage] as? UIImage {
+            onImage?(image)
+        }
+        onCancel?()
+    }
+
+    func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+        onCancel?()
+    }
+}
+
+private final class RepairLibraryHost: UIViewController, PHPickerViewControllerDelegate {
+    var onImage: ((UIImage) -> Void)?
+    var onCancel: (() -> Void)?
+    private var started = false
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        view.backgroundColor = .black
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        guard !started else { return }
+        started = true
+        var config = PHPickerConfiguration(photoLibrary: .shared())
+        config.filter = .images
+        config.selectionLimit = 1
+        let picker = PHPickerViewController(configuration: config)
+        picker.delegate = self
+        picker.modalPresentationStyle = .fullScreen
+        present(picker, animated: false)
+    }
+
+    func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
+        guard let provider = results.first?.itemProvider, provider.canLoadObject(ofClass: UIImage.self) else {
+            onCancel?()
+            return
+        }
+        provider.loadObject(ofClass: UIImage.self) { [weak self] object, _ in
+            DispatchQueue.main.async {
+                if let image = object as? UIImage {
+                    self?.onImage?(image)
+                }
+                self?.onCancel?()
+            }
         }
     }
 }

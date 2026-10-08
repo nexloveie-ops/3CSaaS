@@ -31,46 +31,35 @@ export interface RepairTicketInput {
   photoCount?: number;
 }
 
-/** Customer copy (with price and terms) then shop copy, cut between them. */
+/** Blank lines let the last row clear the cutter. One cut, after the whole ticket. */
+const FEED_BEFORE_CUT = '<BR><BR><BR><BR><CUT>';
+
+/** One customer repair ticket. No cut until the text has finished. */
 export function renderRepairTickets(c: RepairTicketInput): string {
   const device = [c.deviceBrand, c.deviceModel].filter(Boolean).join(' ');
   const where = c.repairLocation?.trim()
-    ? `外送 ${safe(c.repairLocation)}`
-    : '店内';
-  const head = [
-    `<C>${safe(c.storeName) || '门店'}</C><BR>`,
+    ? `Send out: ${safe(c.repairLocation)}`
+    : 'In store';
+  return [
+    '<CB>REPAIR RECEIPT</CB><BR>',
+    `<C>${safe(c.storeName) || 'Store'}</C><BR>`,
     c.storeAddress ? `<C>${safe(c.storeAddress)}</C><BR>` : '',
     c.storePhone ? `<C>${safe(c.storePhone)}</C><BR>` : '',
-    `单号: ${safe(c.docNumber)}<BR>`,
-    `时间: ${safe(c.printedAt)}<BR>`,
-    row('顾客', c.customerName),
-    row('电话', c.customerPhone),
-    row('设备', device),
+    row('Receipt', c.docNumber),
+    row('Time', c.printedAt),
+    row('Customer', c.customerName),
+    row('Phone', c.customerPhone),
+    row('Device', device),
     row('IMEI/SN', c.imeiSn),
-    row('故障', c.issueDescription),
-    `维修: ${where}<BR>`,
-    row('预计完成', c.expectedCompletion),
-  ].join('');
-
-  const customer = [
-    '<CB>维修接机单</CB><BR>',
-    '<C>客户联</C><BR>',
-    head,
-    `金额: €${c.priceIncVat.toFixed(2)}<BR>`,
-    c.repairTerms?.trim()
-      ? `<BR>条款<BR>${safe(c.repairTerms).slice(0, 800)}<BR>`
-      : '',
-  ].join('');
-
-  const shop = [
-    '<CB>维修接机单</CB><BR>',
-    '<C>门店联</C><BR>',
-    head,
-    row('备注', c.notes),
-    c.photoCount ? `照片: ${c.photoCount}<BR>` : '',
-  ].join('');
-
-  return `${customer}<BR><CUT>${shop}<BR><CUT>`.slice(0, 4500);
+    row('Fault', c.issueDescription),
+    `Repair: ${where}<BR>`,
+    row('Expected', c.expectedCompletion),
+    `Amount: €${c.priceIncVat.toFixed(2)}<BR>`,
+    c.repairTerms?.trim() ? `<BR>Terms<BR>${safe(c.repairTerms)}<BR>` : '',
+    FEED_BEFORE_CUT,
+  ]
+    .join('')
+    .slice(0, 4500);
 }
 
 export interface SaleTicketInput {
@@ -92,32 +81,21 @@ export function renderSaleTicket(c: SaleTicketInput): string {
       return `${safe(l.productName)} x${l.quantity}  €${l.lineTotalIncVat.toFixed(2)}${sn}<BR>`;
     })
     .join('');
-  const pay = c.paymentLines
-    .map((l) =>
-      l
-        .replace(/^Cash:/, '现金:')
-        .replace(/^Card:/, '刷卡:')
-        .replace(/^Received:/, '实收:')
-        .replace(/^Change:/, '找零:'),
-    )
-    .map((l) => `${safe(l)}<BR>`)
-    .join('');
-  const terms = c.salesTerms?.trim()
-    ? `<BR>${safe(c.salesTerms).slice(0, 600)}<BR>`
-    : '';
+  const pay = c.paymentLines.map((l) => `${safe(l)}<BR>`).join('');
+  const terms = c.salesTerms?.trim() ? `<BR>Terms<BR>${safe(c.salesTerms)}<BR>` : '';
   return [
-    '<CB>销售小票</CB><BR>',
-    `<C>${safe(c.storeName) || '门店'}</C><BR>`,
+    '<CB>SALES RECEIPT</CB><BR>',
+    `<C>${safe(c.storeName) || 'Store'}</C><BR>`,
     c.storeAddress ? `<C>${safe(c.storeAddress)}</C><BR>` : '',
     c.storePhone ? `<C>${safe(c.storePhone)}</C><BR>` : '',
-    `单号: ${safe(c.docNumber)}<BR>`,
-    `日期: ${safe(c.businessDate)}<BR>`,
+    row('Receipt', c.docNumber),
+    row('Date', c.businessDate),
     '<BR>',
     lines,
-    `<BR>合计: €${c.totalIncVat.toFixed(2)}<BR>`,
+    `<BR>TOTAL: €${c.totalIncVat.toFixed(2)}<BR>`,
     pay,
     terms,
-    '<CUT>',
+    FEED_BEFORE_CUT,
   ]
     .join('')
     .slice(0, 4500);

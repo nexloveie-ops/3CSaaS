@@ -253,7 +253,7 @@ struct APIClient: Sendable {
         do {
             (data, response) = try await URLSession.shared.data(for: request)
         } catch {
-            throw APIFailure(message: "连不上服务器。模拟器用 127.0.0.1，真机请填这台电脑的局域网地址。")
+            throw APIFailure(message: "连不上服务器。请检查登录页里的服务器地址。")
         }
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         if !(200..<300).contains(status) {
@@ -288,7 +288,7 @@ struct APIClient: Sendable {
         do {
             (data, response) = try await URLSession.shared.data(for: request)
         } catch {
-            throw APIFailure(message: "连不上服务器。模拟器用 127.0.0.1，真机请填这台电脑的局域网地址。")
+            throw APIFailure(message: "连不上服务器。请检查登录页里的服务器地址。")
         }
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         if !(200..<300).contains(status) {

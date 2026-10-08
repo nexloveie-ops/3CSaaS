@@ -1,0 +1,16 @@
+---
+description: On a reported bug, read the code before explaining a cause
+alwaysApply: true
+---
+
+# Check the code before guessing
+
+When the user reports an error, read the code path that handles that action before stating a cause. Do not open with a guess about deploy state, environment variables, or a missing rebuild.
+
+Name the function or write path that produced the result, then fix that code.
+
+```text
+User: 维修单图片不在桶里
+❌ "Cloud Run 可能还没重新部署"
+✅ Open the photo upload function, see it writes to local disk, then change that write
+```

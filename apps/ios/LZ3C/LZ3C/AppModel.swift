@@ -19,7 +19,7 @@ final class AppModel: ObservableObject {
         #if targetEnvironment(simulator)
         baseURL = saved ?? Self.simulatorServer
         #else
-        if let saved, !Self.isLoopback(saved) {
+        if let saved, !Self.shouldReplace(saved) {
             baseURL = saved
         } else {
             baseURL = Self.deviceServer
@@ -34,13 +34,17 @@ final class AppModel: ObservableObject {
     #if targetEnvironment(simulator)
     private static let simulatorServer = "http://127.0.0.1:3000/api"
     #else
-    private static let deviceServer = "http://192.168.1.10:3000/api"
-    #endif
-
-    private static func isLoopback(_ url: String) -> Bool {
+    private static let deviceServer = "https://lz3csaas-972911409379.europe-west1.run.app/api"
+    private static let retiredServers = [
+        "http://192.168.1.10:3000/api",
+    ]
+    private static func shouldReplace(_ url: String) -> Bool {
         let value = url.lowercased()
-        return value.contains("127.0.0.1") || value.contains("localhost")
+        if value.contains("127.0.0.1") || value.contains("localhost") { return true }
+        let trimmed = url.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        return retiredServers.contains(trimmed) || retiredServers.contains(url)
     }
+    #endif
 
     var store: StoreRow? { stores.first { $0.id == storeId } }
 

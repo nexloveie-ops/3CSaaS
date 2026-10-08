@@ -11,6 +11,8 @@ struct BuyInView: View {
     @State private var capacity = ""
     @State private var color = ""
     @State private var imei = ""
+    @State private var customer = ""
+    @State private var phone = ""
     @State private var price = ""
     @State private var notes = ""
     @State private var payment = "cash"
@@ -18,9 +20,13 @@ struct BuyInView: View {
     @State private var previews: [Int: UIImage] = [:]
     @State private var photoMenuSlot: Int?
     @State private var photoRequest: BuyPhotoRequest?
-    @State private var scanning = false
     @State private var draftId: String?
     @State private var pending: [BuyInRow] = []
+    @State private var historyQuery = ""
+    @State private var history: [BuyInRow] = []
+    @State private var historyTask: Task<Void, Never>?
+    @State private var historyGeneration = 0
+    @State private var scanTarget: BuyScanTarget?
     @State private var selected: BuyInRow?
     @State private var busy = false
     @State private var message: String?
@@ -40,6 +46,8 @@ struct BuyInView: View {
             && !capacity.trimmingCharacters(in: .whitespaces).isEmpty
             && !color.trimmingCharacters(in: .whitespaces).isEmpty
             && !imei.trimmingCharacters(in: .whitespaces).isEmpty
+            && !customer.trimmingCharacters(in: .whitespaces).isEmpty
+            && !phone.trimmingCharacters(in: .whitespaces).isEmpty
             && buyPrice != nil
             && photos[1] != nil && photos[2] != nil && photos[3] != nil
             && !busy
@@ -65,9 +73,11 @@ struct BuyInView: View {
                     field(language.t("buy.model"), text: $deviceModel)
                     field(language.t("buy.capacity"), text: $capacity)
                     field(language.t("buy.color"), text: $color)
+                    field(language.t("buy.customer"), text: $customer)
+                    field(language.t("buy.phone"), text: $phone, phone: true)
                     HStack(alignment: .bottom, spacing: 8) {
                         field(language.t("buy.imei"), text: $imei)
-                        Button { scanning = true } label: {
+                        Button { scanTarget = .imei } label: {
                             Image(systemName: "barcode.viewfinder")
                                 .font(.system(size: 16, weight: .semibold))
                                 .foregroundStyle(ShopTheme.indigo)
@@ -107,21 +117,44 @@ struct BuyInView: View {
                     } else {
                         ForEach(pending) { row in
                             Button { selected = row } label: {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(row.title)
-                                        .font(.subheadline.weight(.semibold))
-                                        .foregroundStyle(ShopTheme.ink)
-                                    Text(row.imeiSn)
-                                        .font(.caption)
-                                        .foregroundStyle(ShopTheme.muted)
-                                    Text(String(format: "€%.2f", row.buyPrice))
-                                        .font(.subheadline.weight(.bold))
-                                        .foregroundStyle(ShopTheme.indigo)
-                                }
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(12)
+                                buyRow(row, showsStatus: false)
                             }
                             .buttonStyle(ShopTileButtonStyle())
+                        }
+                    }
+                    ShopPageTitle(title: language.t("buy.history"), horizontallyPadded: false)
+                    HStack(spacing: 8) {
+                        TextField(language.t("buy.historyHint"), text: $historyQuery)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .padding(.horizontal, 12)
+                            .frame(height: 44)
+                            .background(Color.white)
+                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(ShopTheme.border, lineWidth: 1))
+                        Button { scanTarget = .history } label: {
+                            Image(systemName: "barcode.viewfinder")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundStyle(ShopTheme.indigo)
+                                .frame(width: 44, height: 44)
+                                .background(Color.white)
+                                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(ShopTheme.border, lineWidth: 1))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    if !historyQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        if history.isEmpty {
+                            Text(language.t("buy.historyEmpty"))
+                                .font(.subheadline)
+                                .foregroundStyle(ShopTheme.muted)
+                        } else {
+                            ForEach(history) { row in
+                                Button { selected = row } label: {
+                                    buyRow(row, showsStatus: true)
+                                }
+                                .buttonStyle(ShopTileButtonStyle())
+                            }
                         }
                     }
                 }
@@ -130,9 +163,15 @@ struct BuyInView: View {
         }
         .background(ShopTheme.canvas.ignoresSafeArea())
         .task { await load() }
-        .fullScreenCover(isPresented: $scanning) {
+        .onChange(of: historyQuery) { _ in scheduleHistorySearch() }
+        .fullScreenCover(isPresented: Binding(
+            get: { scanTarget != nil },
+            set: { if !$0 { scanTarget = nil } }
+        )) {
             BarcodeScanner { code in
-                imei = code.trimmingCharacters(in: .whitespacesAndNewlines)
+                let value = code.trimmingCharacters(in: .whitespacesAndNewlines)
+                if scanTarget == .history { historyQuery = value }
+                else { imei = value }
             }
             .environmentObject(language)
         }
@@ -175,6 +214,7 @@ struct BuyInView: View {
         .sheet(item: $selected) { row in
             BuyInStockSheet(row: row) {
                 pending.removeAll { $0.id == row.id }
+                history.removeAll { $0.id == row.id }
                 if pending.isEmpty { formOpen = true }
                 selected = nil
                 messageIsError = false
@@ -185,18 +225,47 @@ struct BuyInView: View {
         }
     }
 
-    private func field(_ title: String, text: Binding<String>, number: Bool = false) -> some View {
+    private func field(_ title: String, text: Binding<String>, number: Bool = false, phone: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title).font(.caption).foregroundStyle(ShopTheme.muted)
             TextField(title, text: text)
-                .keyboardType(number ? .decimalPad : .default)
-                .textInputAutocapitalization(number ? .never : .words)
+                .keyboardType(phone ? .phonePad : (number ? .decimalPad : .default))
+                .textInputAutocapitalization(number || phone ? .never : .words)
                 .padding(.horizontal, 12)
                 .frame(height: 44)
                 .background(Color.white)
                 .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(ShopTheme.border, lineWidth: 1))
         }
+    }
+
+    private func buyRow(_ row: BuyInRow, showsStatus: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(row.title)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(ShopTheme.ink)
+            Text(row.imeiSn)
+                .font(.caption)
+                .foregroundStyle(ShopTheme.muted)
+            if let name = row.customerName, !name.isEmpty {
+                Text([name, row.customerPhone].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "))
+                    .font(.caption)
+                    .foregroundStyle(ShopTheme.muted)
+            }
+            HStack {
+                Text(String(format: "€%.2f", row.buyPrice))
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(ShopTheme.indigo)
+                if showsStatus {
+                    Spacer()
+                    Text(row.status == "stocked" ? language.t("buy.stocked") : language.t("buy.pending"))
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(ShopTheme.muted)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
     }
 
     private func photoButton(_ slot: Int, _ title: String) -> some View {
@@ -231,6 +300,9 @@ struct BuyInView: View {
         do {
             let rows = try await model.client.buyIns()
             pending = rows
+            if !historyQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                await searchHistory()
+            }
             if !appliedDefault {
                 formOpen = rows.isEmpty
                 appliedDefault = true
@@ -239,6 +311,56 @@ struct BuyInView: View {
             messageIsError = true
             message = error.localizedDescription
         }
+    }
+
+    private func scheduleHistorySearch() {
+        historyTask?.cancel()
+        let query = historyQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else {
+            history = []
+            return
+        }
+        historyTask = Task {
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            if Task.isCancelled { return }
+            await searchHistory()
+        }
+    }
+
+    private func searchHistory() async {
+        let query = historyQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else {
+            history = []
+            return
+        }
+        historyGeneration += 1
+        let generation = historyGeneration
+        do {
+            async let waiting = model.client.buyIns(status: "pending_inspection")
+            async let stocked = model.client.buyIns(status: "stocked")
+            let rows = try await waiting + stocked
+            guard generation == historyGeneration else { return }
+            history = rows.filter { matchesHistory($0, query: query) }
+        } catch {
+            guard generation == historyGeneration else { return }
+            messageIsError = true
+            message = error.localizedDescription
+        }
+    }
+
+    private func matchesHistory(_ row: BuyInRow, query: String) -> Bool {
+        let folded = query.lowercased()
+        let digits = query.filter(\.isNumber)
+        let description = [row.brand, row.model, row.capacity, row.color, row.notes ?? ""]
+            .joined(separator: " ")
+            .lowercased()
+        if description.contains(folded) { return true }
+        if (row.customerName ?? "").lowercased().contains(folded) { return true }
+        let imei = row.imeiSn.lowercased()
+        if imei.contains(folded) { return true }
+        if digits.count >= 5, imei.filter(\.isNumber).contains(digits) { return true }
+        let phone = (row.customerPhone ?? "").filter(\.isNumber)
+        return digits.count >= 3 && phone.contains(digits)
     }
 
     private func submit() async {
@@ -252,6 +374,8 @@ struct BuyInView: View {
             "capacity": capacity.trimmingCharacters(in: .whitespaces),
             "color": color.trimmingCharacters(in: .whitespaces),
             "imeiSn": imei.trimmingCharacters(in: .whitespaces),
+            "customerName": customer.trimmingCharacters(in: .whitespaces),
+            "customerPhone": phone.trimmingCharacters(in: .whitespaces),
             "buyPrice": buyPrice,
             "paymentMethod": payment,
         ]
@@ -291,6 +415,8 @@ struct BuyInView: View {
         capacity = ""
         color = ""
         imei = ""
+        customer = ""
+        phone = ""
         price = ""
         notes = ""
         payment = "cash"
@@ -317,6 +443,8 @@ struct BuyInView: View {
     }
 }
 
+private enum BuyScanTarget { case imei, history }
+
 private struct BuyPhotoRequest: Identifiable {
     let slot: Int
     let library: Bool
@@ -333,6 +461,8 @@ private struct BuyInStockSheet: View {
     @State private var catalogs: [CatalogCategory] = []
     @State private var catalogId = ""
     @State private var images: [Int: UIImage] = [:]
+    @State private var missingSlots: Set<Int> = []
+    @State private var zoom: ZoomShot?
     @State private var busy = false
     @State private var error: String?
 
@@ -351,6 +481,12 @@ private struct BuyInStockSheet: View {
                     LabeledContent(language.t("buy.capacity"), value: row.capacity)
                     LabeledContent(language.t("buy.color"), value: row.color)
                     LabeledContent(language.t("buy.imei"), value: row.imeiSn)
+                    if let name = row.customerName, !name.isEmpty {
+                        LabeledContent(language.t("buy.customer"), value: name)
+                    }
+                    if let phone = row.customerPhone, !phone.isEmpty {
+                        LabeledContent(language.t("buy.phone"), value: phone)
+                    }
                     LabeledContent(language.t("buy.price"), value: String(format: "€%.2f", row.buyPrice))
                     LabeledContent(language.t("buy.pay"), value: row.paymentMethod == "cash" ? language.t("buy.cash") : language.t("buy.transfer"))
                     if let notes = row.notes, !notes.isEmpty {
@@ -358,24 +494,42 @@ private struct BuyInStockSheet: View {
                     }
                 }
                 Section {
-                    HStack(spacing: 8) {
-                        ForEach(1...3, id: \.self) { slot in
+                    ForEach(1...3, id: \.self) { slot in
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(language.t("buy.photo\(slot)"))
+                                .font(.caption)
+                                .foregroundStyle(ShopTheme.muted)
                             if let image = images[slot] {
-                                Image(uiImage: image)
-                                    .resizable()
-                                    .scaledToFill()
-                                    .frame(width: 88, height: 88)
-                                    .clipped()
-                                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                Button {
+                                    zoom = ZoomShot(id: "\(slot)", image: image)
+                                } label: {
+                                    Image(uiImage: image)
+                                        .resizable()
+                                        .scaledToFit()
+                                        .frame(maxWidth: .infinity)
+                                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                }
+                                .buttonStyle(.plain)
+                            } else if missingSlots.contains(slot) {
+                                Text(language.t("buy.photoMissing"))
+                                    .font(.subheadline)
+                                    .foregroundStyle(ShopTheme.muted)
+                            } else {
+                                ProgressView()
+                                    .frame(maxWidth: .infinity, minHeight: 88)
                             }
                         }
                     }
-                    TextField(language.t("buy.retail"), text: $retail)
-                        .keyboardType(.decimalPad)
-                    Picker(language.t("buy.catalog"), selection: $catalogId) {
-                        Text("—").tag("")
-                        ForEach(catalogs) { catalog in
-                            Text(catalog.name).tag(catalog.id)
+                }
+                if row.status == "pending_inspection" {
+                    Section {
+                        TextField(language.t("buy.retail"), text: $retail)
+                            .keyboardType(.decimalPad)
+                        Picker(language.t("buy.catalog"), selection: $catalogId) {
+                            Text("—").tag("")
+                            ForEach(catalogs) { catalog in
+                                Text(catalog.name).tag(catalog.id)
+                            }
                         }
                     }
                 }
@@ -386,25 +540,37 @@ private struct BuyInStockSheet: View {
             .navigationTitle(row.title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(language.t("buy.stock")) { Task { await stock() } }
-                        .disabled(retailPrice == nil || catalogId.isEmpty || busy)
+                if row.status == "pending_inspection" {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button(language.t("buy.stock")) { Task { await stock() } }
+                            .disabled(retailPrice == nil || catalogId.isEmpty || busy)
+                    }
                 }
             }
             .task {
                 await loadPhotos()
-                await loadCatalogs()
+                if row.status == "pending_inspection" { await loadCatalogs() }
+            }
+            .fullScreenCover(item: $zoom) { shot in
+                PhotoZoom(image: shot.image)
+                    .environmentObject(language)
             }
         }
     }
 
     private func loadPhotos() async {
+        var loaded: [Int: UIImage] = [:]
+        var missing: Set<Int> = []
         for slot in 1...3 {
             if let data = try? await model.client.buyInPhoto(id: row.id, slot: slot),
                let image = UIImage(data: data) {
-                images[slot] = image
+                loaded[slot] = image
+            } else {
+                missing.insert(slot)
             }
         }
+        images = loaded
+        missingSlots = missing
     }
 
     private func loadCatalogs() async {
@@ -491,7 +657,7 @@ private final class BuyCameraHost: UIViewController, UIImagePickerControllerDele
             onLibrary?()
             return
         }
-        let picker = UIImagePickerController()
+        let picker = FullScreenCameraPicker()
         picker.sourceType = .camera
         picker.cameraCaptureMode = .photo
         picker.delegate = self

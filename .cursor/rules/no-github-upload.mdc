@@ -1,0 +1,16 @@
+---
+description: Do not commit or push to GitHub unless the user explicitly asks
+alwaysApply: true
+---
+
+# Do not upload to GitHub unless asked
+
+Do not commit, push, open a pull request, or otherwise upload this project to GitHub unless the user explicitly asks to upload, commit, or push.
+
+Local edits, installs, and tests stay local. A Cloud Run or production fix is not permission to push.
+
+```text
+User: 维修照片没有进桶
+❌ git add / git commit / git push
+✅ Change the code locally and say it has not been uploaded
+```
