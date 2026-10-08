@@ -240,12 +240,19 @@ export class BuyInService {
       isActive: true,
     });
     if (!catalog) throw new BadRequestException('Catalog not found');
+    const tax = await this.taxModel.findOne({
+      _id: dto.taxCategoryId,
+      companyId: row.companyId,
+      isActive: true,
+    });
+    if (!tax) throw new BadRequestException('VAT category not found');
     await this.productModel.updateOne(
       { _id: row.productId },
       {
         $set: {
           retailPrice: dto.retailPrice,
           catalogCategoryId: catalog._id,
+          taxCategoryId: tax._id,
           isActive: true,
         },
       },

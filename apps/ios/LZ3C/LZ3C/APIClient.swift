@@ -131,11 +131,20 @@ struct APIClient: Sendable {
         try await send("POST", "/buy-ins/\(id)/complete")
     }
 
-    func stockInBuyIn(id: String, retailPrice: Double, catalogCategoryId: String) async throws -> BuyInRow {
+    func stockInBuyIn(
+        id: String,
+        retailPrice: Double,
+        catalogCategoryId: String,
+        taxCategoryId: String
+    ) async throws -> BuyInRow {
         try await send(
             "POST",
             "/buy-ins/\(id)/stock-in",
-            json: ["retailPrice": retailPrice, "catalogCategoryId": catalogCategoryId]
+            json: [
+                "retailPrice": retailPrice,
+                "catalogCategoryId": catalogCategoryId,
+                "taxCategoryId": taxCategoryId,
+            ]
         )
     }
 

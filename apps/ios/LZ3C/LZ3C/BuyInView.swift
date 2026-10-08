@@ -460,6 +460,8 @@ private struct BuyInStockSheet: View {
     @State private var retail = ""
     @State private var catalogs: [CatalogCategory] = []
     @State private var catalogId = ""
+    @State private var taxes: [TaxCategoryRow] = []
+    @State private var taxId = ""
     @State private var images: [Int: UIImage] = [:]
     @State private var missingSlots: Set<Int> = []
     @State private var zoom: ZoomShot?
@@ -531,6 +533,12 @@ private struct BuyInStockSheet: View {
                                 Text(catalog.name).tag(catalog.id)
                             }
                         }
+                        Picker(language.t("buy.vat"), selection: $taxId) {
+                            Text("—").tag("")
+                            ForEach(taxes) { tax in
+                                Text(tax.name).tag(tax.id)
+                            }
+                        }
                     }
                 }
                 if let error {
@@ -543,13 +551,13 @@ private struct BuyInStockSheet: View {
                 if row.status == "pending_inspection" {
                     ToolbarItem(placement: .confirmationAction) {
                         Button(language.t("buy.stock")) { Task { await stock() } }
-                            .disabled(retailPrice == nil || catalogId.isEmpty || busy)
+                            .disabled(retailPrice == nil || catalogId.isEmpty || taxId.isEmpty || busy)
                     }
                 }
             }
             .task {
                 await loadPhotos()
-                if row.status == "pending_inspection" { await loadCatalogs() }
+                if row.status == "pending_inspection" { await loadChoices() }
             }
             .fullScreenCover(item: $zoom) { shot in
                 PhotoZoom(image: shot.image)
@@ -573,23 +581,30 @@ private struct BuyInStockSheet: View {
         missingSlots = missing
     }
 
-    private func loadCatalogs() async {
+    private func loadChoices() async {
         do {
             catalogs = try await model.client.catalogCategories()
                 .filter { $0.isActive != false }
                 .sorted { ($0.sortOrder ?? 0, $0.name) < ($1.sortOrder ?? 0, $1.name) }
+            taxes = try await model.client.taxCategories()
+                .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
         } catch {
             self.error = error.localizedDescription
         }
     }
 
     private func stock() async {
-        guard let retailPrice, !catalogId.isEmpty else { return }
+        guard let retailPrice, !catalogId.isEmpty, !taxId.isEmpty else { return }
         busy = true
         error = nil
         defer { busy = false }
         do {
-            _ = try await model.client.stockInBuyIn(id: row.id, retailPrice: retailPrice, catalogCategoryId: catalogId)
+            _ = try await model.client.stockInBuyIn(
+                id: row.id,
+                retailPrice: retailPrice,
+                catalogCategoryId: catalogId,
+                taxCategoryId: taxId
+            )
             onStocked()
         } catch {
             self.error = error.localizedDescription

@@ -7,4 +7,7 @@ export class StockInBuyInDto {
 
   @IsMongoId()
   catalogCategoryId!: string;
+
+  @IsMongoId()
+  taxCategoryId!: string;
 }

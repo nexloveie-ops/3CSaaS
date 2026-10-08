@@ -34,6 +34,12 @@ export interface RepairTicketInput {
 /** Blank lines let the last row clear the cutter. One cut, after the whole ticket. */
 const FEED_BEFORE_CUT = '<BR><BR><BR><BR><CUT>';
 
+/**
+ * The cutter sits behind the print head. The sales ticket needs a longer
+ * feed so the last line is past the blade before the single cut.
+ */
+const SALE_FEED_BEFORE_CUT = '<BR><BR><BR><BR><BR><BR><BR><BR><CUT>';
+
 /** One customer repair ticket. No cut until the text has finished. */
 export function renderRepairTickets(c: RepairTicketInput): string {
   const device = [c.deviceBrand, c.deviceModel].filter(Boolean).join(' ');
@@ -126,26 +132,28 @@ function renderSaleLine(l: SaleTicketLine): string {
 }
 
 function renderSalePayment(total: number, p: SaleTicketPayment): string {
-  const lines = [`Total: ${euro(total)}<BR>`];
+  const lines = [right(`Total: ${euro(total)}`)];
   if (p.method === 'cash') {
-    lines.push(`Cash: ${euro(p.amountTendered ?? p.cashAmount ?? total)}<BR>`);
+    lines.push(right(`Cash: ${euro(p.amountTendered ?? p.cashAmount ?? total)}`));
   } else if (p.method === 'card') {
-    lines.push(`Card: ${euro(p.cardAmount || total)}<BR>`);
+    lines.push(right(`Card: ${euro(p.cardAmount || total)}`));
   } else if (p.method === 'mixed') {
-    lines.push(`Cash: ${euro(p.cashAmount)}<BR>`);
-    lines.push(`Card: ${euro(p.cardAmount)}<BR>`);
+    lines.push(right(`Cash: ${euro(p.cashAmount)}`));
+    lines.push(right(`Card: ${euro(p.cardAmount)}`));
   } else if (p.method === 'bank_transfer' || p.method === 'other') {
-    lines.push('Bank transfer<BR>');
+    lines.push(right('Bank transfer'));
   } else if (p.method) {
-    lines.push(`${safe(p.method)}<BR>`);
+    lines.push(right(p.method));
   }
   if ((p.changeGiven ?? 0) > 0) {
-    lines.push(`Change: ${euro(p.changeGiven ?? 0)}<BR>`);
+    lines.push(right(`Change: ${euro(p.changeGiven ?? 0)}`));
   }
   return lines.join('');
 }
 
-/** One clause per numbered item: "1. ... 2. ..." becomes two lines. */
+const THANKS_PATTERN = /thank you for your business[.!]?/i;
+
+/** One clause per numbered item. "10." must stay intact, not split into "1" and "0.". */
 function termsClauses(text?: string): string[] {
   const cleaned = String(text ?? '')
     .replace(/[<>]/g, '')
@@ -154,29 +162,42 @@ function termsClauses(text?: string): string[] {
   if (!cleaned) return [];
   return cleaned
     .split(/\n+/)
-    .flatMap((line) => line.split(/(?=\d+\.\s)/))
+    .flatMap((line) => line.split(/(?<!\d)(?=\d+\.\s)/))
     .map((part) => part.trim())
     .filter(Boolean);
 }
 
+function renderTerms(text?: string): string {
+  const parts = termsClauses(text);
+  if (!parts.length) return '';
+  let thanks = '';
+  const last = parts[parts.length - 1];
+  const thanksAt = last.search(THANKS_PATTERN);
+  if (thanksAt >= 0) {
+    thanks = last.slice(thanksAt).trim();
+    const before = last.slice(0, thanksAt).trim();
+    if (before) parts[parts.length - 1] = before;
+    else parts.pop();
+  }
+  const clauses = parts.map((part) => `${part}<BR>`).join('');
+  const closing = thanks ? `<C>${thanks}</C><BR>` : '';
+  return `<BR><C>Terms And Condition</C><BR>${clauses}${closing}`;
+}
+
 export function renderSaleTicket(c: SaleTicketInput): string {
   const lines = c.lines.map(renderSaleLine).join('<BR>');
-  const clauses = termsClauses(c.salesTerms);
-  const terms = clauses.length
-    ? `<BR><C>Terms And Condition</C><BR>${clauses.map((part) => `${part}<BR>`).join('')}`
-    : '';
   const body = [
     '<CB>SALES RECEIPT</CB><BR>',
-    `<C>${safe(c.storeName) || 'Store'}</C><BR>`,
-    c.storeAddress ? `<C>${safe(c.storeAddress)}</C><BR>` : '',
-    c.storePhone ? `<C>${safe(c.storePhone)}</C><BR>` : '',
+    `<CB><BOLD>${safe(c.storeName) || 'Store'}</BOLD></CB><BR>`,
+    c.storeAddress ? `<C>Address: ${safe(c.storeAddress)}</C><BR>` : '',
+    c.storePhone ? `<C>Tel: ${safe(c.storePhone)}</C><BR>` : '',
     row('Receipt', c.docNumber),
     row('Date', c.businessDate),
     '<BR>',
     lines,
     '<BR>',
     renderSalePayment(c.totalIncVat, c.payment),
-    terms,
+    renderTerms(c.salesTerms),
   ].join('');
-  return body.slice(0, 4500 - FEED_BEFORE_CUT.length) + FEED_BEFORE_CUT;
+  return body.slice(0, 4500 - SALE_FEED_BEFORE_CUT.length) + SALE_FEED_BEFORE_CUT;
 }
