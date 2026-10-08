@@ -22,6 +22,7 @@
 		B10000000000000000000012 /* SkuFillView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000012 /* SkuFillView.swift */; };
 		B10000000000000000000013 /* BuyInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000013 /* BuyInView.swift */; };
 		B10000000000000000000014 /* RefundView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000014 /* RefundView.swift */; };
+		B10000000000000000000015 /* ReportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000015 /* ReportView.swift */; };
 		B1000000000000000000000A /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F1000000000000000000000A /* Assets.xcassets */; };
 		B1000000000000000000000B /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = F1000000000000000000000B /* PrivacyInfo.xcprivacy */; };
 		B1000000000000000000000C /* StripeTerminal in Frameworks */ = {isa = PBXBuildFile; productRef = D10000000000000000000001 /* StripeTerminal */; };
@@ -43,6 +44,7 @@
 		F10000000000000000000012 /* SkuFillView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkuFillView.swift; sourceTree = "<group>"; };
 		F10000000000000000000013 /* BuyInView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuyInView.swift; sourceTree = "<group>"; };
 		F10000000000000000000014 /* RefundView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RefundView.swift; sourceTree = "<group>"; };
+		F10000000000000000000015 /* ReportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReportView.swift; sourceTree = "<group>"; };
 		F1000000000000000000000A /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		F1000000000000000000000B /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		F1000000000000000000000C /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -88,6 +90,7 @@
 				F10000000000000000000012 /* SkuFillView.swift */,
 				F10000000000000000000013 /* BuyInView.swift */,
 				F10000000000000000000014 /* RefundView.swift */,
+				F10000000000000000000015 /* ReportView.swift */,
 				F1000000000000000000000A /* Assets.xcassets */,
 				F1000000000000000000000B /* PrivacyInfo.xcprivacy */,
 				F1000000000000000000000C /* Info.plist */,
@@ -195,6 +198,7 @@
 				B10000000000000000000012 /* SkuFillView.swift in Sources */,
 				B10000000000000000000013 /* BuyInView.swift in Sources */,
 				B10000000000000000000014 /* RefundView.swift in Sources */,
+				B10000000000000000000015 /* ReportView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

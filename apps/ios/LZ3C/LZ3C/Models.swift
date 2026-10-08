@@ -303,3 +303,36 @@ struct TaxCategoryRow: Decodable, Identifiable {
     let isDefault: Bool?
     var id: String { _id }
 }
+
+struct SalesReport: Decodable {
+    let receiptCount: Int
+    let itemsSold: Double
+    let turnoverIncVat: Double
+    let turnoverExVat: Double
+    let vatTotal: Double
+    let costTotal: Double
+    let grossProfit: Double
+    let profitMarginPct: Double
+    let payments: SalesPayments
+    let taxBreakdown: [SalesTaxRow]
+    let openWorkOrders: Int
+    let repairRevenueIncVat: Double
+}
+
+struct SalesPayments: Decodable {
+    let cash: Double
+    let card: Double
+    let other: Double
+    let total: Double
+}
+
+struct SalesTaxRow: Decodable, Identifiable {
+    let scheme: String
+    let label: String
+    let revenueIncVat: Double
+    let vat: Double
+    let revenueExVat: Double
+    let cost: Double
+    let profit: Double
+    var id: String { scheme }
+}

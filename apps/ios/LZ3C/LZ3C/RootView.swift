@@ -27,27 +27,87 @@ struct ShopTabs: View {
                     Image(systemName: "cart")
                     Text(language.t("tab.sales"))
                 }
-            RefundView()
-                .tabItem {
-                    Image(systemName: "arrow.uturn.backward")
-                    Text(language.t("tab.refund"))
-                }
             RepairsView()
                 .tabItem {
                     Image(systemName: "wrench.and.screwdriver")
                     Text(language.t("tab.repairs"))
-                }
-            SkuFillView()
-                .tabItem {
-                    Image(systemName: "barcode.viewfinder")
-                    Text(language.t("tab.skuFill"))
                 }
             BuyInView()
                 .tabItem {
                     Image(systemName: "arrow.down.to.line")
                     Text(language.t("tab.buyIn"))
                 }
+            ReportView()
+                .tabItem {
+                    Image(systemName: "chart.bar")
+                    Text(language.t("tab.report"))
+                }
+            MoreView()
+                .tabItem {
+                    Image(systemName: "ellipsis")
+                    Text(language.t("tab.more"))
+                }
         }
+    }
+}
+
+private enum MorePage: Hashable {
+    case refund
+    case barcodes
+}
+
+struct MoreView: View {
+    @EnvironmentObject private var language: LanguageStore
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                ShopHeader {}
+                ShopPageTitle(title: language.t("tab.more"))
+                VStack(spacing: 12) {
+                    NavigationLink(value: MorePage.refund) {
+                        moreRow(systemImage: "arrow.uturn.backward", title: language.t("tab.refund"))
+                    }
+                    NavigationLink(value: MorePage.barcodes) {
+                        moreRow(systemImage: "barcode.viewfinder", title: language.t("tab.skuFill"))
+                    }
+                }
+                .padding(16)
+                Spacer(minLength: 0)
+            }
+            .background(ShopTheme.canvas)
+            .toolbar(.hidden, for: .navigationBar)
+            .navigationDestination(for: MorePage.self) { page in
+                Group {
+                    switch page {
+                    case .refund:
+                        RefundView()
+                    case .barcodes:
+                        SkuFillView()
+                    }
+                }
+                .toolbar(.visible, for: .navigationBar)
+                .navigationBarTitleDisplayMode(.inline)
+            }
+        }
+    }
+
+    private func moreRow(systemImage: String, title: String) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: systemImage)
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(ShopTheme.indigo)
+                .frame(width: 28)
+            Text(title)
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(ShopTheme.ink)
+            Spacer()
+            Image(systemName: "chevron.right")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(ShopTheme.muted)
+        }
+        .padding(16)
+        .shopCard()
     }
 }
 

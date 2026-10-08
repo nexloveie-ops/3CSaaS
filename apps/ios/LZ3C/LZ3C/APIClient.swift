@@ -131,6 +131,10 @@ struct APIClient: Sendable {
         try await send("POST", "/buy-ins/\(id)/complete")
     }
 
+    func salesReport(from: String, to: String) async throws -> SalesReport {
+        try await send("GET", "/reports/sales?from=\(from)&to=\(to)")
+    }
+
     func stockInBuyIn(
         id: String,
         retailPrice: Double,

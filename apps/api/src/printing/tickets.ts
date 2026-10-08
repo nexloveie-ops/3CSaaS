@@ -35,10 +35,11 @@ export interface RepairTicketInput {
 const FEED_BEFORE_CUT = '<BR><BR><BR><BR><CUT>';
 
 /**
- * The cutter sits behind the print head. The sales ticket needs a longer
- * feed so the last line is past the blade before the single cut.
+ * Do not send <CUT>. This printer already cuts when the job finishes.
+ * A <CUT> in the ticket fires before that and slices the receipt early.
+ * The blank lines push the last row past the blade before that final cut.
  */
-const SALE_FEED_BEFORE_CUT = '<BR><BR><BR><BR><BR><BR><BR><BR><CUT>';
+const SALE_END_FEED = '<BR><BR><BR><BR><BR><BR><BR><BR>';
 
 /** One customer repair ticket. No cut until the text has finished. */
 export function renderRepairTickets(c: RepairTicketInput): string {
@@ -199,5 +200,5 @@ export function renderSaleTicket(c: SaleTicketInput): string {
     renderSalePayment(c.totalIncVat, c.payment),
     renderTerms(c.salesTerms),
   ].join('');
-  return body.slice(0, 4500 - SALE_FEED_BEFORE_CUT.length) + SALE_FEED_BEFORE_CUT;
+  return body.slice(0, 4500 - SALE_END_FEED.length) + SALE_END_FEED;
 }
