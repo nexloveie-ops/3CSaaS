@@ -46,7 +46,31 @@ function boldRow(label: string, value?: string): string {
 
 const REPAIR_TERMS_TITLE = 'Repair Terms & Conditions';
 
-/** Keep each stored paragraph on its own line. Drop a repeated title. */
+/** 80mm Feie prints 48 letters per line and cuts the rest mid-word. */
+const RECEIPT_COLUMNS = 48;
+
+function wrapWords(text: string): string[] {
+  const words = text.split(/\s+/).filter(Boolean);
+  const lines: string[] = [];
+  let current = '';
+  for (const word of words) {
+    const next = current ? `${current} ${word}` : word;
+    if (current && next.length > RECEIPT_COLUMNS) {
+      lines.push(current);
+      current = word;
+    } else {
+      current = next;
+    }
+  }
+  if (current) lines.push(current);
+  return lines;
+}
+
+function wrapped(text: string): string {
+  return wrapWords(text).map((line) => `${line}<BR>`).join('');
+}
+
+/** Keep each stored paragraph, wrapped on word boundaries. Drop a repeated title. */
 function renderRepairTerms(text?: string): string {
   const raw = String(text ?? '').trim();
   if (!raw) return '';
@@ -56,7 +80,7 @@ function renderRepairTerms(text?: string): string {
     .split(/\n+/)
     .map((part) => part.trim())
     .filter((part) => part && part.toLowerCase() !== REPAIR_TERMS_TITLE.toLowerCase());
-  const body = paragraphs.map((part) => `${part}<BR>`).join('');
+  const body = paragraphs.map((part) => wrapped(part)).join('<BR>');
   return `<BR><C>${REPAIR_TERMS_TITLE}</C><BR>${body}`;
 }
 
@@ -224,7 +248,7 @@ function renderTerms(text?: string): string {
     if (before) parts[parts.length - 1] = before;
     else parts.pop();
   }
-  const clauses = parts.map((part) => `${part}<BR>`).join('');
+  const clauses = parts.map((part) => wrapped(part)).join('');
   const closing = thanks ? `<C>${thanks}</C><BR>` : '';
   return `<BR><C>Terms And Condition</C><BR>${clauses}${closing}`;
 }
