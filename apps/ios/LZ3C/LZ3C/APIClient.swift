@@ -135,6 +135,11 @@ struct APIClient: Sendable {
         try await send("GET", "/reports/sales?from=\(from)&to=\(to)")
     }
 
+    func salesTaxLines(from: String, to: String, scheme: String) async throws -> SalesTaxDetail {
+        let encoded = scheme.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? scheme
+        return try await send("GET", "/reports/sales/lines?from=\(from)&to=\(to)&scheme=\(encoded)")
+    }
+
     func stockInBuyIn(
         id: String,
         retailPrice: Double,

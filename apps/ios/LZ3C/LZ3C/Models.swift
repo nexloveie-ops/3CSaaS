@@ -336,3 +336,19 @@ struct SalesTaxRow: Decodable, Identifiable {
     let profit: Double
     var id: String { scheme }
 }
+
+struct SalesTaxDetail: Decodable {
+    let lines: [SalesTaxLine]
+}
+
+struct SalesTaxLine: Decodable, Identifiable {
+    let id: String
+    let docNumber: String
+    let businessDate: String
+    let docType: String
+    let productName: String
+    let quantity: Double
+    let unitPriceIncVat: Double
+    let lineTotalIncVat: Double
+    let sn: String?
+}

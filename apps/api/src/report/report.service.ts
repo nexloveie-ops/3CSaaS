@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import {
@@ -127,6 +127,80 @@ export class ReportService {
       repairRevenueIncVat: round2(repairRevenueIncVat),
       taxBreakdown: buildTaxBreakdown(taxCategories, byTax),
       openWorkOrders,
+    };
+  }
+
+  async getSalesLines(
+    userId: string,
+    companyId: string,
+    storeId: string,
+    from: string,
+    to: string,
+    scheme: string,
+  ) {
+    await this.companyService.assertMember(userId, companyId);
+    const allowed = ['zero', 'standard_13_5', 'standard_23', 'margin_23'];
+    if (!allowed.includes(scheme)) {
+      throw new BadRequestException('Unknown tax category');
+    }
+    const range = {
+      companyId: new Types.ObjectId(companyId),
+      storeId: new Types.ObjectId(storeId),
+      businessDate: { $gte: from, $lte: to },
+      status: 'completed',
+    };
+    const [orders, creditNotes] = await Promise.all([
+      this.orderModel.find({ ...range, docType: 'receipt' }).lean(),
+      this.orderModel.find({ ...range, docType: 'credit_note' }).lean(),
+    ]);
+
+    const lines: {
+      id: string;
+      docNumber: string;
+      businessDate: string;
+      docType: string;
+      productName: string;
+      quantity: number;
+      unitPriceIncVat: number;
+      lineTotalIncVat: number;
+      sn?: string;
+    }[] = [];
+    const push = (
+      order: (typeof orders)[number],
+      sign: number,
+    ) => {
+      order.lines.forEach((line, index) => {
+        const lineScheme = line.taxScheme || 'standard_23';
+        if (lineScheme !== scheme) return;
+        const figures = lineFigures(line);
+        if (figures.gross <= 0 && figures.items <= 0) return;
+        lines.push({
+          id: `${String(order._id)}:${index}`,
+          docNumber: order.docNumber,
+          businessDate: order.businessDate ?? '',
+          docType: order.docType,
+          productName: line.productName,
+          quantity: sign * figures.items,
+          unitPriceIncVat: line.unitPriceIncVat,
+          lineTotalIncVat: round2(sign * figures.gross),
+          sn: line.sn?.trim() || undefined,
+        });
+      });
+    };
+    for (const order of orders) push(order, 1);
+    for (const note of creditNotes) push(note, -1);
+    lines.sort((a, b) => {
+      const byDate = b.businessDate.localeCompare(a.businessDate);
+      if (byDate) return byDate;
+      return b.docNumber.localeCompare(a.docNumber);
+    });
+
+    return {
+      scheme,
+      label: taxSchemeReportLabel(scheme),
+      from,
+      to,
+      lines,
     };
   }
 

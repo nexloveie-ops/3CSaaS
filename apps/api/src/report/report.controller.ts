@@ -14,6 +14,27 @@ import { ReportService } from './report.service';
 export class ReportController {
   constructor(private service: ReportService) {}
 
+  @Get('sales/lines')
+  salesLines(
+    @CurrentUser() user: { userId: string },
+    @Headers('x-company-id') companyId: string,
+    @Headers('x-store-id') storeId: string,
+    @Query('from') from: string,
+    @Query('to') to: string,
+    @Query('scheme') scheme: string,
+  ) {
+    const start = from ?? new Date().toISOString().slice(0, 10);
+    const end = to ?? start;
+    return this.service.getSalesLines(
+      user.userId,
+      companyId,
+      storeId,
+      start,
+      end,
+      scheme ?? '',
+    );
+  }
+
   @Get('sales')
   salesSummary(
     @CurrentUser() user: { userId: string },

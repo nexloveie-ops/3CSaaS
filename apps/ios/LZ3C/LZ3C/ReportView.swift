@@ -20,18 +20,23 @@ struct ReportView: View {
     @State private var busy = false
     @State private var error = ""
     @State private var picking: ReportDateField?
+    @State private var selectedTax: SalesTaxRow?
 
     var body: some View {
         VStack(spacing: 0) {
             ShopHeader {
-                guard unlocked else { return }
+                guard unlocked, selectedTax == nil else { return }
                 Task { await load() }
             }
-            ShopPageTitle(title: language.t("report.title"))
-            if unlocked {
-                reportBody
+            if let selectedTax {
+                taxDetail(selectedTax)
             } else {
-                lock
+                ShopPageTitle(title: language.t("report.title"))
+                if unlocked {
+                    reportBody
+                } else {
+                    lock
+                }
             }
         }
         .background(ShopTheme.canvas)
@@ -40,6 +45,7 @@ struct ReportView: View {
             code = ""
             codeError = ""
             report = nil
+            selectedTax = nil
         }
     }
 
@@ -214,14 +220,20 @@ struct ReportView: View {
                     .foregroundStyle(ShopTheme.muted)
             }
             ForEach(report.taxBreakdown) { row in
-                taxGroup(row.label, revenue: row.revenueIncVat, vat: row.vat, cost: row.cost, profit: row.profit)
+                Button {
+                    selectedTax = row
+                } label: {
+                    taxGroup(row.label, revenue: row.revenueIncVat, vat: row.vat, cost: row.cost, profit: row.profit, tappable: true)
+                }
+                .buttonStyle(.plain)
             }
             taxGroup(
                 language.t("report.total"),
                 revenue: report.turnoverIncVat,
                 vat: report.vatTotal,
                 cost: report.costTotal,
-                profit: report.grossProfit
+                profit: report.grossProfit,
+                tappable: false
             )
         }
         .padding(12)
@@ -336,7 +348,13 @@ struct ReportView: View {
         }
     }
 
-    private func taxGroup(_ title: String, revenue: Double, vat: Double, cost: Double, profit: Double) -> some View {
+    private func taxDetail(_ row: SalesTaxRow) -> some View {
+        TaxSalesList(row: row, from: fromDay, to: toDay) {
+            selectedTax = nil
+        }
+    }
+
+    private func taxGroup(_ title: String, revenue: Double, vat: Double, cost: Double, profit: Double, tappable: Bool) -> some View {
         let costColor = Color(red: 0.18, green: 0.45, blue: 0.86)
         let profitColor = Color(red: 0.92, green: 0.72, blue: 0.12)
         let parts = [max(cost, 0), max(profit, 0), max(vat, 0)]
@@ -351,6 +369,11 @@ struct ReportView: View {
                     .font(.subheadline.weight(.semibold))
                     .monospacedDigit()
                     .foregroundStyle(ShopTheme.ink)
+                if tappable {
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(ShopTheme.muted)
+                }
             }
             GeometryReader { geo in
                 let base = max(total, 0.01)
@@ -380,5 +403,123 @@ struct ReportView: View {
                 .foregroundStyle(ShopTheme.slate)
                 .lineLimit(1)
         }
+    }
+}
+
+private struct TaxSalesList: View {
+    @EnvironmentObject private var model: AppModel
+    @EnvironmentObject private var language: LanguageStore
+    let row: SalesTaxRow
+    let from: String
+    let to: String
+    let onBack: () -> Void
+
+    @State private var lines: [SalesTaxLine] = []
+    @State private var busy = false
+    @State private var error = ""
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                Button(action: onBack) {
+                    Image(systemName: "chevron.left")
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(ShopTheme.indigo)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(row.label)
+                        .font(.system(size: 22, weight: .semibold))
+                        .foregroundStyle(ShopTheme.ink)
+                    Text("\(language.t("report.sales"))  \(from) – \(to)")
+                        .font(.caption)
+                        .foregroundStyle(ShopTheme.muted)
+                }
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 8)
+            .padding(.bottom, 12)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 10) {
+                    if busy && lines.isEmpty {
+                        ProgressView().frame(maxWidth: .infinity)
+                    }
+                    if !error.isEmpty {
+                        Text(error)
+                            .font(.subheadline)
+                            .foregroundStyle(ShopTheme.danger)
+                    }
+                    if !busy && error.isEmpty && lines.isEmpty {
+                        Text(language.t("report.emptyTax"))
+                            .font(.subheadline)
+                            .foregroundStyle(ShopTheme.muted)
+                    }
+                    ForEach(lines) { line in
+                        saleRow(line)
+                    }
+                }
+                .padding(16)
+            }
+        }
+        .task(id: "\(row.scheme)|\(from)|\(to)") { await load() }
+    }
+
+    private func saleRow(_ line: SalesTaxLine) -> some View {
+        let refund = line.docType == "credit_note"
+        return VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(line.productName)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(ShopTheme.ink)
+                    .lineLimit(2)
+                Spacer(minLength: 8)
+                Text(money(line.lineTotalIncVat))
+                    .font(.subheadline.weight(.semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(refund ? ShopTheme.danger : ShopTheme.ink)
+            }
+            if let sn = line.sn, !sn.isEmpty {
+                Text("IMEI/SN: \(sn)")
+                    .font(.caption)
+                    .foregroundStyle(ShopTheme.slate)
+            }
+            HStack {
+                Text(line.docNumber)
+                Text("·")
+                Text(line.businessDate)
+                if refund {
+                    Text("·")
+                    Text(language.t("report.refundLine"))
+                }
+                Spacer()
+                Text("×\(qty(line.quantity))  \(money(line.unitPriceIncVat))")
+                    .monospacedDigit()
+            }
+            .font(.caption)
+            .foregroundStyle(ShopTheme.muted)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .shopCard()
+    }
+
+    private func load() async {
+        busy = true
+        error = ""
+        defer { busy = false }
+        do {
+            lines = try await model.client.salesTaxLines(from: from, to: to, scheme: row.scheme).lines
+        } catch {
+            lines = []
+            self.error = error.localizedDescription
+        }
+    }
+
+    private func money(_ value: Double) -> String { String(format: "€%.2f", value) }
+
+    private func qty(_ value: Double) -> String {
+        let whole = abs(value.rounded() - value) < 0.001
+        let shown = abs(value)
+        return whole ? String(format: "%.0f", shown) : String(format: "%.2f", shown)
     }
 }

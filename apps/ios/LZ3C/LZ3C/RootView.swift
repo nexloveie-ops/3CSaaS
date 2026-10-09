@@ -78,16 +78,7 @@ struct MoreView: View {
             .background(ShopTheme.canvas)
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: MorePage.self) { page in
-                Group {
-                    switch page {
-                    case .barcodes:
-                        SkuFillView()
-                    case .report:
-                        ReportView()
-                    }
-                }
-                .toolbar(.visible, for: .navigationBar)
-                .navigationBarTitleDisplayMode(.inline)
+                MoreDestination(page: page)
             }
         }
     }
@@ -108,6 +99,39 @@ struct MoreView: View {
         }
         .padding(16)
         .shopCard()
+    }
+}
+
+private struct MoreDestination: View {
+    @Environment(\.dismiss) private var dismiss
+    let page: MorePage
+
+    var body: some View {
+        Group {
+            switch page {
+            case .barcodes:
+                SkuFillView()
+            case .report:
+                ReportView()
+            }
+        }
+        .toolbar(.hidden, for: .navigationBar)
+        .navigationBarBackButtonHidden(true)
+        .overlay(alignment: .leading) {
+            Color.clear
+                .frame(width: 16)
+                .frame(maxHeight: .infinity)
+                .contentShape(Rectangle())
+                .gesture(
+                    DragGesture(minimumDistance: 12, coordinateSpace: .local)
+                        .onEnded { value in
+                            let dx = value.translation.width
+                            let dy = value.translation.height
+                            guard dx > 50, abs(dx) > abs(dy) else { return }
+                            dismiss()
+                        }
+                )
+        }
     }
 }
 
