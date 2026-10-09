@@ -427,10 +427,9 @@ struct SellView: View {
                 showCashFields = false
                 if tendered.isEmpty { tendered = String(format: "%.2f", total) }
             }
-            .confirmationDialog(
+            .alert(
                 language.tf("pos.confirmCard", money(total)),
-                isPresented: $confirmCard,
-                titleVisibility: .visible
+                isPresented: $confirmCard
             ) {
                 Button(language.t("pos.confirmCardYes")) {
                     Task { await payRecordedCard() }

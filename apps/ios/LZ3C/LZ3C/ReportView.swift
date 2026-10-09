@@ -214,27 +214,15 @@ struct ReportView: View {
                     .foregroundStyle(ShopTheme.muted)
             }
             ForEach(report.taxBreakdown) { row in
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(row.label)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(ShopTheme.ink)
-                    taxLine(language.t("report.inc"), row.revenueIncVat)
-                    taxLine(language.t("report.ex"), row.revenueExVat)
-                    taxLine(language.t("report.vatCol"), row.vat)
-                    taxLine(language.t("report.costCol"), row.cost)
-                    taxLine(language.t("report.profitCol"), row.profit)
-                }
+                taxGroup(row.label, revenue: row.revenueIncVat, vat: row.vat, cost: row.cost, profit: row.profit)
             }
-            VStack(alignment: .leading, spacing: 4) {
-                Text(language.t("report.total"))
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(ShopTheme.ink)
-                taxLine(language.t("report.inc"), report.turnoverIncVat)
-                taxLine(language.t("report.ex"), report.turnoverExVat)
-                taxLine(language.t("report.vatCol"), report.vatTotal)
-                taxLine(language.t("report.costCol"), report.costTotal)
-                taxLine(language.t("report.profitCol"), report.grossProfit)
-            }
+            taxGroup(
+                language.t("report.total"),
+                revenue: report.turnoverIncVat,
+                vat: report.vatTotal,
+                cost: report.costTotal,
+                profit: report.grossProfit
+            )
         }
         .padding(12)
         .shopCard()
@@ -348,12 +336,49 @@ struct ReportView: View {
         }
     }
 
-    private func taxLine(_ label: String, _ amount: Double) -> some View {
-        HStack {
-            Text(label).foregroundStyle(ShopTheme.slate)
-            Spacer()
-            Text(money(amount)).foregroundStyle(ShopTheme.ink).monospacedDigit()
+    private func taxGroup(_ title: String, revenue: Double, vat: Double, cost: Double, profit: Double) -> some View {
+        let costColor = Color(red: 0.18, green: 0.45, blue: 0.86)
+        let profitColor = Color(red: 0.92, green: 0.72, blue: 0.12)
+        let parts = [max(cost, 0), max(profit, 0), max(vat, 0)]
+        let total = parts.reduce(0, +)
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(ShopTheme.ink)
+                Spacer()
+                Text(money(revenue))
+                    .font(.subheadline.weight(.semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(ShopTheme.ink)
+            }
+            GeometryReader { geo in
+                let base = max(total, 0.01)
+                HStack(spacing: 0) {
+                    costColor.frame(width: geo.size.width * parts[0] / base)
+                    profitColor.frame(width: geo.size.width * parts[1] / base)
+                    ShopTheme.danger.frame(width: geo.size.width * parts[2] / base)
+                }
+            }
+            .frame(height: 14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Capsule().fill(ShopTheme.canvas))
+            .clipShape(Capsule())
+            HStack(spacing: 12) {
+                swatch(language.t("report.costCol"), cost, costColor)
+                swatch(language.t("report.profitCol"), profit, profitColor)
+                swatch(language.t("report.vatCol"), vat, ShopTheme.danger)
+            }
         }
-        .font(.subheadline)
+    }
+
+    private func swatch(_ label: String, _ amount: Double, _ color: Color) -> some View {
+        HStack(spacing: 4) {
+            Circle().fill(color).frame(width: 8, height: 8)
+            Text("\(label) \(money(amount))")
+                .font(.caption2)
+                .foregroundStyle(ShopTheme.slate)
+                .lineLimit(1)
+        }
     }
 }

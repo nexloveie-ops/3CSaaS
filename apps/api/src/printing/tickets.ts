@@ -31,9 +31,6 @@ export interface RepairTicketInput {
   photoCount?: number;
 }
 
-/** Blank lines let the last row clear the cutter. One cut, after the whole ticket. */
-const FEED_BEFORE_CUT = '<BR><BR><BR><BR><CUT>';
-
 /**
  * Do not send <CUT>. This printer already cuts when the job finishes.
  * A <CUT> in the ticket fires before that and slices the receipt early.
@@ -41,32 +38,79 @@ const FEED_BEFORE_CUT = '<BR><BR><BR><BR><CUT>';
  */
 const SALE_END_FEED = '<BR><BR><BR><BR><BR><BR><BR><BR>';
 
-/** One customer repair ticket. No cut until the text has finished. */
+function boldRow(label: string, value?: string): string {
+  const text = safe(value);
+  if (!text) return '';
+  return `<BOLD>${label}: ${text}</BOLD><BR>`;
+}
+
+const REPAIR_TERMS_TITLE = 'Repair Terms & Conditions';
+
+/** Keep each stored paragraph on its own line. Drop a repeated title. */
+function renderRepairTerms(text?: string): string {
+  const raw = String(text ?? '').trim();
+  if (!raw) return '';
+  const paragraphs = raw
+    .replace(/[<>]/g, '')
+    .replace(/\r\n/g, '\n')
+    .split(/\n+/)
+    .map((part) => part.trim())
+    .filter((part) => part && part.toLowerCase() !== REPAIR_TERMS_TITLE.toLowerCase());
+  const body = paragraphs.map((part) => `${part}<BR>`).join('');
+  return `<BR><C>${REPAIR_TERMS_TITLE}</C><BR>${body}`;
+}
+
+function finishTicket(body: string): string {
+  return body.slice(0, 4500 - SALE_END_FEED.length) + SALE_END_FEED;
+}
+
+/** Customer copy. The printer cuts once, after the feed. */
 export function renderRepairTickets(c: RepairTicketInput): string {
   const device = [c.deviceBrand, c.deviceModel].filter(Boolean).join(' ');
-  const where = c.repairLocation?.trim()
-    ? `Send out: ${safe(c.repairLocation)}`
-    : 'In store';
-  return [
+  const sendOut = c.repairLocation?.trim()
+    ? `Repair: Send out: ${safe(c.repairLocation)}<BR>`
+    : '';
+  const body = [
     '<CB>REPAIR RECEIPT</CB><BR>',
     `<C>${safe(c.storeName) || 'Store'}</C><BR>`,
-    c.storeAddress ? `<C>${safe(c.storeAddress)}</C><BR>` : '',
-    c.storePhone ? `<C>${safe(c.storePhone)}</C><BR>` : '',
+    c.storeAddress ? `<C>Address: ${safe(c.storeAddress)}</C><BR>` : '',
+    c.storePhone ? `<C>Tel: ${safe(c.storePhone)}</C><BR>` : '',
     row('Receipt', c.docNumber),
     row('Time', c.printedAt),
     row('Customer', c.customerName),
     row('Phone', c.customerPhone),
-    row('Device', device),
+    boldRow('Device', device),
     row('IMEI/SN', c.imeiSn),
-    row('Fault', c.issueDescription),
-    `Repair: ${where}<BR>`,
+    boldRow('Fault', c.issueDescription),
+    sendOut,
     row('Expected', c.expectedCompletion),
-    `Amount: €${c.priceIncVat.toFixed(2)}<BR>`,
-    c.repairTerms?.trim() ? `<BR>Terms<BR>${safe(c.repairTerms)}<BR>` : '',
-    FEED_BEFORE_CUT,
-  ]
-    .join('')
-    .slice(0, 4500);
+    `<BOLD>Amount: €${c.priceIncVat.toFixed(2)}</BOLD><BR>`,
+    renderRepairTerms(c.repairTerms),
+  ].join('');
+  return finishTicket(body);
+}
+
+/** Shop copy kept at intake. No terms, no amount, order number only in the title. */
+export function renderRepairShopTicket(c: RepairTicketInput): string {
+  const device = [c.deviceBrand, c.deviceModel].filter(Boolean).join(' ');
+  const repair = c.repairLocation?.trim()
+    ? `Repair: ${safe(c.repairLocation)}`
+    : 'Repair: In store';
+  const body = [
+    `<CB>Repair: ${safe(c.docNumber)}</CB><BR>`,
+    `From: ${safe(c.storeName) || 'Store'}<BR>`,
+    c.storeAddress ? `Address: ${safe(c.storeAddress)}<BR>` : '',
+    c.storePhone ? `Tel: ${safe(c.storePhone)}<BR>` : '',
+    `${repair}<BR>`,
+    row('Time', c.printedAt),
+    row('Customer', c.customerName),
+    row('Phone', c.customerPhone),
+    boldRow('Device', device),
+    row('IMEI/SN', c.imeiSn),
+    boldRow('Fault', c.issueDescription),
+    row('Expected', c.expectedCompletion),
+  ].join('');
+  return finishTicket(body);
 }
 
 export interface SaleTicketLine {

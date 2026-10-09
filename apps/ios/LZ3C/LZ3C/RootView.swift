@@ -27,6 +27,11 @@ struct ShopTabs: View {
                     Image(systemName: "cart")
                     Text(language.t("tab.sales"))
                 }
+            RefundView()
+                .tabItem {
+                    Image(systemName: "arrow.uturn.backward")
+                    Text(language.t("tab.refund"))
+                }
             RepairsView()
                 .tabItem {
                     Image(systemName: "wrench.and.screwdriver")
@@ -36,11 +41,6 @@ struct ShopTabs: View {
                 .tabItem {
                     Image(systemName: "arrow.down.to.line")
                     Text(language.t("tab.buyIn"))
-                }
-            ReportView()
-                .tabItem {
-                    Image(systemName: "chart.bar")
-                    Text(language.t("tab.report"))
                 }
             MoreView()
                 .tabItem {
@@ -52,8 +52,8 @@ struct ShopTabs: View {
 }
 
 private enum MorePage: Hashable {
-    case refund
     case barcodes
+    case report
 }
 
 struct MoreView: View {
@@ -65,11 +65,11 @@ struct MoreView: View {
                 ShopHeader {}
                 ShopPageTitle(title: language.t("tab.more"))
                 VStack(spacing: 12) {
-                    NavigationLink(value: MorePage.refund) {
-                        moreRow(systemImage: "arrow.uturn.backward", title: language.t("tab.refund"))
-                    }
                     NavigationLink(value: MorePage.barcodes) {
                         moreRow(systemImage: "barcode.viewfinder", title: language.t("tab.skuFill"))
+                    }
+                    NavigationLink(value: MorePage.report) {
+                        moreRow(systemImage: "chart.bar", title: language.t("tab.report"))
                     }
                 }
                 .padding(16)
@@ -80,10 +80,10 @@ struct MoreView: View {
             .navigationDestination(for: MorePage.self) { page in
                 Group {
                     switch page {
-                    case .refund:
-                        RefundView()
                     case .barcodes:
                         SkuFillView()
+                    case .report:
+                        ReportView()
                     }
                 }
                 .toolbar(.visible, for: .navigationBar)

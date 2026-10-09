@@ -31,7 +31,7 @@ import { CompanyService } from '../company/company.service';
 import { FileStorageService } from '../storage/file-storage.service';
 import { SmsService } from '../notification/sms.service';
 import { FeiePrintService } from '../printing/feie-print.service';
-import { renderRepairTickets } from '../printing/tickets';
+import { renderRepairShopTicket, renderRepairTickets } from '../printing/tickets';
 import { CreateWorkOrderDto } from './dto/create-work-order.dto';
 import { TransitionWorkOrderDto } from './dto/transition-work-order.dto';
 import { UpdateWorkOrderDto } from './dto/update-work-order.dto';
@@ -215,7 +215,7 @@ export class WorkOrderService {
       dateStyle: 'short',
       timeStyle: 'short',
     });
-    const content = renderRepairTickets({
+    const ticket = {
       storeName: store.name,
       storeAddress: store.address,
       storePhone: store.phone,
@@ -235,8 +235,9 @@ export class WorkOrderService {
       repairTerms: store.repairTerms,
       notes: wo.notes,
       photoCount: wo.photoIds?.length ?? 0,
-    });
-    return this.feie.print(companyId, storeId, content);
+    };
+    await this.feie.print(companyId, storeId, renderRepairTickets(ticket));
+    return this.feie.print(companyId, storeId, renderRepairShopTicket(ticket));
   }
 
   async create(
