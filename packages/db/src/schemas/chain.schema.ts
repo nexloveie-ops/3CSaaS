@@ -62,6 +62,9 @@ export class DailySummary {
   cardTotal!: number;
 
   @Prop({ default: 0 })
+  tapTotal!: number;
+
+  @Prop({ default: 0 })
   otherTotal!: number;
 
   @Prop({ default: 0 })

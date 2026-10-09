@@ -30,6 +30,15 @@ export function resolveSalePayment(
     };
   }
 
+  if (method === 'tap_to_pay') {
+    return {
+      paymentMethod: 'tap_to_pay',
+      cashAmount: 0,
+      cardAmount: 0,
+      paymentMethodLabel: 'Tap to Pay',
+    };
+  }
+
   if (method === 'mixed') {
     const cash = round2(dto.cashAmount ?? 0);
     const card = round2(dto.cardAmount ?? 0);
@@ -80,6 +89,7 @@ export function resolveSalePayment(
 export function formatPaymentMethodLabel(method: string): string {
   if (method === 'cash') return 'Cash';
   if (method === 'card') return 'Card';
+  if (method === 'tap_to_pay') return 'Tap to Pay';
   if (method === 'mixed') return 'Mixed';
   if (method === 'other') return 'Invoice (awaiting payment)';
   if (method === 'bank_transfer') return 'Bank transfer';
@@ -107,6 +117,9 @@ export function buildReceiptPaymentLines(order: {
   }
   if (order.paymentMethod === 'card') {
     return [`Card: €${(order.cardAmount ?? total).toFixed(2)}`];
+  }
+  if (order.paymentMethod === 'tap_to_pay') {
+    return [`Tap to Pay: €${total.toFixed(2)}`];
   }
   if (order.paymentMethod === 'mixed') {
     return [
@@ -189,6 +202,9 @@ export function paymentSplitForReport(order: {
   cashAmount?: number;
   cardAmount?: number;
 }): { cash: number; card: number; other: number } {
+  if (order.paymentMethod === 'tap_to_pay') {
+    return { cash: 0, card: 0, other: 0 };
+  }
   if (order.cashAmount != null || order.cardAmount != null) {
     return {
       cash: order.cashAmount ?? 0,

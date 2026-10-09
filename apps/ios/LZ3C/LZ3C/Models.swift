@@ -322,6 +322,7 @@ struct SalesReport: Decodable {
 struct SalesPayments: Decodable {
     let cash: Double
     let card: Double
+    let tap: Double?
     let other: Double
     let total: Double
 }

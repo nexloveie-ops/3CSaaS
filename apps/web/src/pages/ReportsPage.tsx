@@ -18,7 +18,7 @@ type SalesReport = {
   costTotal: number;
   grossProfit: number;
   profitMarginPct: number;
-  payments: { cash: number; card: number; other: number; total: number };
+  payments: { cash: number; card: number; tap?: number; other: number; total: number };
   taxBreakdown: {
     scheme: string;
     label: string;
@@ -64,6 +64,7 @@ export function ReportsPage() {
     return [
       { key: 'cash', label: t('reports.cash'), amount: report.payments.cash },
       { key: 'card', label: t('reports.card'), amount: report.payments.card },
+      { key: 'tap', label: t('reports.tap'), amount: report.payments.tap ?? 0 },
       { key: 'other', label: t('reports.other'), amount: report.payments.other },
     ].filter((r) => r.amount > 0 || total === 0);
   }, [report, t]);

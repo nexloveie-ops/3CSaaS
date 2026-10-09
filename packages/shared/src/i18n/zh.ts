@@ -901,6 +901,7 @@ export const zhMessages: Messages = {
     date: '日期',
     cash: '现金',
     card: '刷卡',
+    tap: 'Tap to Pay',
     other: '其他',
     openWorkOrders: '未完成维修单',
     from: '开始',

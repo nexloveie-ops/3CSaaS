@@ -57,6 +57,7 @@ export class ReportService {
     let costTotal = 0;
     let cashTotal = 0;
     let cardTotal = 0;
+    let tapTotal = 0;
     let otherTotal = 0;
     let itemsSold = 0;
     let repairRevenueIncVat = 0;
@@ -70,6 +71,7 @@ export class ReportService {
       const split = grossPaymentSplit(order);
       cashTotal += sign * split.cash;
       cardTotal += sign * split.card;
+      tapTotal += sign * split.tap;
       otherTotal += sign * split.other;
 
       for (const line of order.lines) {
@@ -121,6 +123,7 @@ export class ReportService {
       payments: {
         cash: round2(cashTotal),
         card: round2(cardTotal),
+        tap: round2(tapTotal),
         other: round2(otherTotal),
         total: round2(turnoverIncVat),
       },
@@ -227,6 +230,7 @@ export class ReportService {
     let salesTotal = 0;
     let cashTotal = 0;
     let cardTotal = 0;
+    let tapTotal = 0;
     let otherTotal = 0;
 
     const applySplit = (
@@ -234,9 +238,10 @@ export class ReportService {
       sign: number,
     ) => {
       const split = grossPaymentSplit(order);
-      salesTotal += sign * (split.cash + split.card + split.other);
+      salesTotal += sign * (split.cash + split.card + split.tap + split.other);
       cashTotal += sign * split.cash;
       cardTotal += sign * split.card;
+      tapTotal += sign * split.tap;
       otherTotal += sign * split.other;
     };
     for (const order of orders) applySplit(order, 1);
@@ -258,6 +263,7 @@ export class ReportService {
         salesCount: orders.length,
         cashTotal: round2(cashTotal),
         cardTotal: round2(cardTotal),
+        tapTotal: round2(tapTotal),
         otherTotal: round2(otherTotal),
         openWorkOrders,
       },
@@ -489,7 +495,10 @@ function grossPaymentSplit(order: {
   totalIncVat: number;
   cashAmount?: number;
   cardAmount?: number;
-}): { cash: number; card: number; other: number } {
+}): { cash: number; card: number; tap: number; other: number } {
+  if (order.paymentMethod === 'tap_to_pay') {
+    return { cash: 0, card: 0, tap: order.totalIncVat, other: 0 };
+  }
   const cash = order.cashAmount ?? 0;
   const card = order.cardAmount ?? 0;
   if (cash > 0 || card > 0) {
@@ -501,11 +510,11 @@ function grossPaymentSplit(order: {
       order.paymentMethod === 'mixed'
         ? remainder
         : 0;
-    return { cash, card, other };
+    return { cash, card, tap: 0, other };
   }
-  if (order.paymentMethod === 'card') return { cash: 0, card: order.totalIncVat, other: 0 };
-  if (order.paymentMethod === 'cash') return { cash: order.totalIncVat, card: 0, other: 0 };
-  return { cash: 0, card: 0, other: order.totalIncVat };
+  if (order.paymentMethod === 'card') return { cash: 0, card: order.totalIncVat, tap: 0, other: 0 };
+  if (order.paymentMethod === 'cash') return { cash: order.totalIncVat, card: 0, tap: 0, other: 0 };
+  return { cash: 0, card: 0, tap: 0, other: order.totalIncVat };
 }
 
 function lineFigures(line: {

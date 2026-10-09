@@ -78,7 +78,7 @@ export class Order {
 
   @Prop({
     required: true,
-    enum: ['cash', 'card', 'mixed', 'other', 'bank_transfer'],
+    enum: ['cash', 'card', 'tap_to_pay', 'mixed', 'other', 'bank_transfer'],
     default: 'cash',
   })
   paymentMethod!: string;

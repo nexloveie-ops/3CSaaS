@@ -25,6 +25,8 @@ struct SellView: View {
     @State private var message: String?
     @State private var messageIsError = false
     @State private var showCart = false
+    @State private var paymentNotice: String?
+    @State private var pendingNotice: String?
     @State private var showCashFields = false
     @State private var confirmCard = false
     @State private var showTapScreen = false
@@ -90,11 +92,26 @@ struct SellView: View {
         .overlay { if showTapScreen { tapScreen } }
         .toolbar(showTapScreen ? .hidden : .visible, for: .tabBar)
         .sheet(isPresented: $showCart, onDismiss: {
-            guard let token = tapAfterCartDismiss else { return }
-            tapAfterCartDismiss = nil
-            guard token == tapToken, showTapScreen else { return }
-            Task { await payCard(token: token) }
+            if let token = tapAfterCartDismiss {
+                tapAfterCartDismiss = nil
+                if token == tapToken, showTapScreen {
+                    Task { await payCard(token: token) }
+                }
+            }
+            if let text = pendingNotice {
+                pendingNotice = nil
+                paymentNotice = text
+            }
         }) { cartSheet }
+        .alert(
+            paymentNotice ?? "",
+            isPresented: Binding(
+                get: { paymentNotice != nil },
+                set: { if !$0 { paymentNotice = nil } }
+            )
+        ) {
+            Button(language.t("pos.close"), role: .cancel) {}
+        }
         .sheet(item: $variantParent) { parent in variantSheet(parent) }
         .sheet(item: $serialProduct) { product in serialSheet(product) }
         .sheet(isPresented: $showQuickSale) {
@@ -1141,7 +1158,7 @@ struct SellView: View {
             )
             guard token == tapToken else { return }
             showTapScreen = false
-            await checkout(method: "card", tendered: nil, paymentId: paymentId)
+            await checkout(method: "tap_to_pay", tendered: nil, paymentId: paymentId)
         } catch {
             guard token == tapToken else { return }
             busy = false
@@ -1180,16 +1197,17 @@ struct SellView: View {
             let sale = try await model.client.createSale(body)
             cart = []
             self.tendered = ""
-            showCart = false
+            let text: String
             do {
                 try await model.client.printSale(id: sale._id)
-                show(language.t("pos.paidPrinted"), error: false)
+                text = language.t("pos.paidPrinted")
             } catch {
-                show(language.tf("pos.paidPrintFailed", error.localizedDescription), error: true)
+                text = language.tf("pos.paidPrintFailed", error.localizedDescription)
             }
             await reload()
+            noticePaid(text)
         } catch {
-            if method == "card" {
+            if method == "card" || method == "tap_to_pay" {
                 show(language.tf("pos.cardNotSaved", paymentId ?? "", error.localizedDescription), error: true)
             } else {
                 show(error.localizedDescription, error: true)
@@ -1200,6 +1218,16 @@ struct SellView: View {
     private func show(_ text: String, error: Bool) {
         message = text
         messageIsError = error
+    }
+
+    private func noticePaid(_ text: String) {
+        pendingNotice = text
+        if showCart {
+            showCart = false
+        } else {
+            pendingNotice = nil
+            paymentNotice = text
+        }
     }
 
     private func money(_ value: Double) -> String { String(format: "€%.2f", value) }

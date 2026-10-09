@@ -903,6 +903,7 @@ export const enMessages = {
     date: 'Date',
     cash: 'Cash',
     card: 'Card',
+    tap: 'Tap to Pay',
     other: 'Other',
     openWorkOrders: 'Open work orders',
     from: 'From',

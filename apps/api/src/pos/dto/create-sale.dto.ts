@@ -66,7 +66,7 @@ export class CreateSaleDto {
   lines!: SaleLineDto[];
 
   @IsOptional()
-  @IsEnum(['cash', 'card', 'mixed', 'other'])
+  @IsEnum(['cash', 'card', 'tap_to_pay', 'mixed', 'other'])
   paymentMethod?: string;
 
   @IsOptional()

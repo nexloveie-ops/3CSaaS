@@ -194,6 +194,9 @@ struct ReportView: View {
                 if report.payments.card > 0 {
                     payRow(language.t("report.card"), report.payments.card, report.payments.total)
                 }
+                if (report.payments.tap ?? 0) > 0 {
+                    payRow(language.t("report.tap"), report.payments.tap ?? 0, report.payments.total)
+                }
                 if report.payments.other > 0 {
                     payRow(language.t("report.other"), report.payments.other, report.payments.total)
                 }

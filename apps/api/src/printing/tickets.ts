@@ -206,6 +206,8 @@ function renderSalePayment(total: number, p: SaleTicketPayment): string {
     lines.push(right(`Cash: ${euro(p.amountTendered ?? p.cashAmount ?? total)}`));
   } else if (p.method === 'card') {
     lines.push(right(`Card: ${euro(p.cardAmount || total)}`));
+  } else if (p.method === 'tap_to_pay') {
+    lines.push(right(`Tap to Pay: ${euro(total)}`));
   } else if (p.method === 'mixed') {
     lines.push(right(`Cash: ${euro(p.cashAmount)}`));
     lines.push(right(`Card: ${euro(p.cardAmount)}`));

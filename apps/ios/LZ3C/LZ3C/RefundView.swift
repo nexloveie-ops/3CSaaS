@@ -431,6 +431,7 @@ private struct RefundDetailSheet: View {
     private func payLabel(_ method: String) -> String {
         if method == "cash" { return language.t("pos.cash") }
         if method == "card" { return language.t("pos.card") }
+        if method == "tap_to_pay" { return language.t("pos.tapToPay") }
         return method
     }
 
